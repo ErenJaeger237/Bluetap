@@ -1,0 +1,16 @@
+# Bluetap — Community Water Management (Distributed Demo)
+
+This repository contains a student project prototype demonstrating a **distributed storage & sync simulation** for the Bluetap community water management system.
+
+## What’s included
+- `storage_virtual_node.py` — instructor-provided node simulation (resource tracking, chunked transfers). :contentReference[oaicite:3]{index=3}  
+- `main.py` — example transfer script showing basic usage. :contentReference[oaicite:4]{index=4}  
+- `bluetap_demo.py` — automated demo harness with four scenarios (offline queue & sync, geo-latency, failure & failover, node metrics).
+- `docs/architecture.md` — explanation of how the simulation maps to Bluetap distributed design.
+
+## How to run (quick)
+1. Ensure Python 3.8+ is installed.  
+2. Place `storage_virtual_node.py`, `main.py`, and `bluetap_demo.py` in the same folder.  
+3. Run demo:
+```bash
+python bluetap_demo.py
