@@ -2,27 +2,21 @@ syntax = "proto3";
 
 package bluetap.v1;
 
-// Optional: helpful when generating language-specific code
 option go_package = "github.com/yourorg/bluetap/proto;bluetap";
 option java_package = "com.yourorg.bluetap.proto";
 option java_multiple_files = true;
 
-// --------------------
-// Common messages
-// --------------------
 message Empty {}
-
 message NodeInfo {
   string node_id = 1;
   string ip = 2;
   int32 port = 3;
   int64 capacity_bytes = 4;
-  string metadata = 5; // optional free-form metadata (JSON)
+  string metadata = 5;
 }
-
 message FileLocation {
   string upload_id = 1;
-  repeated NodeInfo nodes = 2; // nodes holding file (primary first)
+  repeated NodeInfo nodes = 2;
   int64 filesize = 3;
   int32 chunk_size = 4;
   int32 total_chunks = 5;
@@ -30,274 +24,91 @@ message FileLocation {
   string owner = 7;
 }
 
-// --------------------
-// Authentication / OTP
-// --------------------
 service AuthService {
-  // Basic credential login -> server sends OTP or token depending on policy
   rpc Login (LoginRequest) returns (LoginResponse);
-
-  // Request OTP to be sent to user email/phone (gateway will send via OTP mechanism)
   rpc RequestOTP (RequestOTPRequest) returns (RequestOTPResponse);
-
-  // Verify OTP previously sent; returns auth token
   rpc VerifyOTP (VerifyOTPRequest) returns (VerifyOTPResponse);
-
-  // Validate token
   rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
 }
 
-message LoginRequest {
-  string username = 1;
-  string password = 2;
-}
+message LoginRequest { string username = 1; string password = 2; }
+message LoginResponse { string next_action = 1; string message = 2; }
+message RequestOTPRequest { string username = 1; string email_or_phone = 2; }
+message RequestOTPResponse { bool ok = 1; string message = 2; }
+message VerifyOTPRequest { string username = 1; string otp_code = 2; }
+message VerifyOTPResponse { bool ok = 1; string token = 2; string message = 3; }
+message ValidateTokenRequest { string token = 1; }
+message ValidateTokenResponse { bool valid = 1; string username = 2; }
 
-message LoginResponse {
-  string next_action = 1; // "OTP_REQUIRED" or "TOKEN" etc.
-  string message = 2;
-}
-
-message RequestOTPRequest {
-  string username = 1;
-  string email_or_phone = 2;
-}
-
-message RequestOTPResponse {
-  bool ok = 1;
-  string message = 2;
-}
-
-message VerifyOTPRequest {
-  string username = 1;
-  string otp_code = 2;
-}
-
-message VerifyOTPResponse {
-  bool ok = 1;
-  string token = 2; // ephemeral auth token (or JWT)
-  string message = 3;
-}
-
-message ValidateTokenRequest {
-  string token = 1;
-}
-
-message ValidateTokenResponse {
-  bool valid = 1;
-  string username = 2;
-}
-
-// --------------------
-// Gateway API (Client -> Gateway)
-// --------------------
 service Gateway {
-  // Provide upload metadata and selected nodes for uploading
   rpc PutMeta (PutMetaRequest) returns (PutMetaResponse);
-
-  // Get metadata for a file (where to download from)
   rpc GetMeta (GetMetaRequest) returns (GetMetaResponse);
-
-  // List user's files (simple)
   rpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
-
-  // For nodes to register themselves (gateway/coordinator endpoint)
-  rpc RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
+  rpc.RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
 }
 
 message PutMetaRequest {
-  string token = 1;        // auth token (from AuthService)
+  string token = 1;
   string filename = 2;
   int64 filesize = 3;
-  int32 chunk_size = 4;    // requested chunk size (bytes)
-  int32 replication = 5;   // replication factor requested
-  string client_metadata = 6; // optional JSON (tags etc)
-}
-
-message PutMetaResponse {
-  string upload_id = 1;
-  repeated NodeInfo nodes = 2; // nodes to contact for upload (primary first)
-  int32 total_chunks = 3;
   int32 chunk_size = 4;
-  string message = 5;
+  int32 replication = 5;
+  string client_metadata = 6;
 }
+message PutMetaResponse { string upload_id = 1; repeated NodeInfo nodes = 2; int32 total_chunks = 3; int32 chunk_size = 4; string message = 5; }
+message GetMetaRequest { string token = 1; string filename = 2; }
+message GetMetaResponse { FileLocation file = 1; }
+message ListFilesRequest { string token = 1; int32 limit = 2; int32 offset = 3; }
+message FileSummary { string filename = 1; string upload_id = 2; int64 filesize = 3; string created_at = 4; }
+message ListFilesResponse { repeated FileSummary files = 1; int32 total = 2; }
+message RegisterNodeRequest { NodeInfo node = 1; }
+message RegisterNodeResponse { bool ok = 1; string message = 2; }
 
-message GetMetaRequest {
-  string token = 1;
-  string filename = 2;
-}
-
-message GetMetaResponse {
-  FileLocation file = 1;
-}
-
-message ListFilesRequest {
-  string token = 1;
-  int32 limit = 2;
-  int32 offset = 3;
-}
-
-message FileSummary {
-  string filename = 1;
-  string upload_id = 2;
-  int64 filesize = 3;
-  string created_at = 4;
-}
-
-message ListFilesResponse {
-  repeated FileSummary files = 1;
-  int32 total = 2;
-}
-
-message RegisterNodeRequest {
-  NodeInfo node = 1;
-}
-
-message RegisterNodeResponse {
-  bool ok = 1;
-  string message = 2;
-}
-
-// --------------------
-// Node Service (runs on each storage node)
-// --------------------
 service NodeService {
-  // Client streams uploaded chunks to node.
-  // Each stream message contains chunk bytes and metadata.
   rpc PutChunks (stream ChunkUpload) returns (UploadResult);
-
-  // Server streams chunk messages back for a download request.
   rpc GetChunks (GetChunksRequest) returns (stream Chunk);
-
-  // Node heartbeat from node -> coordinator/gateway (unary for simplicity)
   rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
-
-  // Node asks for list of repairs or other orchestrations (optional)
   rpc RepairTasks (RepairRequest) returns (RepairResponse);
 }
 
 message ChunkUpload {
-  string upload_id = 1;   // upload session id (from PutMeta)
+  string upload_id = 1;
   string filename = 2;
-  int32 chunk_id = 3;     // sequence id (0..N-1)
+  int32 chunk_id = 3;
   bytes data = 4;
-  string checksum = 5;    // sha256 hex of data
-  bool last_chunk = 6;    // optional
+  string checksum = 5;
+  bool last_chunk = 6;
   string client_side_meta = 7;
 }
+message UploadResult { bool success = 1; string message = 2; int32 received_chunks = 3; }
+message GetChunksRequest { string upload_id = 1; int32 start_chunk = 2; int32 end_chunk = 3; }
+message Chunk { int32 chunk_id = 1; bytes data = 2; string checksum = 3; }
 
-message UploadResult {
-  bool success = 1;
-  string message = 2;
-  int32 received_chunks = 3;
-}
+message HeartbeatRequest { NodeInfo node = 1; int64 used_bytes = 2; int64 free_bytes = 3; int64 timestamp = 4; }
+message HeartbeatResponse { bool ok = 1; string message = 2; }
+message RepairRequest { string upload_id = 1; }
+message RepairResponse { bool ok = 1; string message = 2; repeated int32 missing_chunks = 3; }
 
-message GetChunksRequest {
-  string upload_id = 1; // or filename
-  int32 start_chunk = 2;
-  int32 end_chunk = 3; // inclusive/exclusive semantics
-}
-
-message Chunk {
-  int32 chunk_id = 1;
-  bytes data = 2;
-  string checksum = 3;
-}
-
-message HeartbeatRequest {
-  NodeInfo node = 1;
-  int64 used_bytes = 2;
-  int64 free_bytes = 3;
-  int64 timestamp = 4;
-}
-
-message HeartbeatResponse {
-  bool ok = 1;
-  string message = 2;
-}
-
-message RepairRequest {
-  string upload_id = 1;
-}
-
-message RepairResponse {
-  bool ok = 1;
-  string message = 2;
-  repeated int32 missing_chunks = 3;
-}
-
-// --------------------
-// Coordinator RPC (internal, optional)
-// --------------------
 service Coordinator {
-  // Coordinator selects nodes for a file upload.
   rpc SelectNodes (SelectNodesRequest) returns (SelectNodesResponse);
-
-  // Coordinator can instruct repair/replication jobs.
   rpc ScheduleRepair (ScheduleRepairRequest) returns (ScheduleRepairResponse);
-
-  // Lookup file -> returns nodes containing file
   rpc LookupFile (LookupFileRequest) returns (LookupFileResponse);
 }
+message SelectNodesRequest { int64 filesize = 1; int32 replication = 2; }
+message SelectNodesResponse { repeated NodeInfo nodes = 1; }
+message ScheduleRepairRequest { string upload_id = 1; repeated int32 chunk_ids = 2; }
+message ScheduleRepairResponse { bool ok = 1; string message = 2; }
+message LookupFileRequest { string filename = 1; }
+message LookupFileResponse { FileLocation file = 1; }
 
-message SelectNodesRequest {
-  int64 filesize = 1;
-  int32 replication = 2;
-}
-
-message SelectNodesResponse {
-  repeated NodeInfo nodes = 1;
-}
-
-message ScheduleRepairRequest {
-  string upload_id = 1;
-  repeated int32 chunk_ids = 2;
-}
-
-message ScheduleRepairResponse {
-  bool ok = 1;
-  string message = 2;
-}
-
-message LookupFileRequest {
-  string filename = 1;
-}
-
-message LookupFileResponse {
-  FileLocation file = 1;
-}
-
-// --------------------
-// Upload resume helper messages
-// --------------------
 service UploadState {
   rpc CreateUploadRecord (CreateUploadRecordRequest) returns (CreateUploadRecordResponse);
   rpc GetMissingChunks (GetMissingChunksRequest) returns (GetMissingChunksResponse);
   rpc FinalizeUpload (FinalizeUploadRequest) returns (FinalizeUploadResponse);
 }
-
-message CreateUploadRecordRequest {
-  string upload_id = 1;
-  string filename = 2;
-  int32 total_chunks = 3;
-}
-
-message CreateUploadRecordResponse {
-  bool ok = 1;
-}
-
-message GetMissingChunksRequest {
-  string upload_id = 1;
-}
-
-message GetMissingChunksResponse {
-  repeated int32 missing_chunks = 1;
-}
-
-message FinalizeUploadRequest {
-  string upload_id = 1;
-}
-
-message FinalizeUploadResponse {
-  bool ok = 1;
-  string message = 2;
-}
+message CreateUploadRecordRequest { string upload_id = 1; string filename = 2; int32 total_chunks = 3; }
+message CreateUploadRecordResponse { bool ok = 1; }
+message GetMissingChunksRequest { string upload_id = 1; }
+message GetMissingChunksResponse { repeated int32 missing_chunks = 1; }
+message FinalizeUploadRequest { string upload_id = 1; }
+message FinalizeUploadResponse { bool ok = 1; string message = 2; }
