@@ -1,4 +1,6 @@
 import grpc, hashlib, os, sys, argparse
+if __package__ is None:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from generated import bluetap_pb2 as pb
 from generated import bluetap_pb2_grpc as rpc
 
@@ -6,7 +8,8 @@ CHUNK_SIZE_DEFAULT = 512 * 1024
 
 def login(gateway_addr, username, password):
     channel = grpc.insecure_channel(gateway_addr)
-    stub = rpc.GatewayStub(channel)
+    # Login is part of the AuthService, not Gateway; use the AuthServiceStub
+    stub = rpc.AuthServiceStub(channel)
     resp = stub.Login(pb.LoginRequest(username=username, password=password))
     return resp.message
 

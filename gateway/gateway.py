@@ -1,6 +1,13 @@
-import os, time, uuid
+import os, time, uuid, sys
 from concurrent import futures
 import grpc
+if __package__ is None:
+    # If the module is executed as a script (python gateway.py) the
+    # working directory in sys.path is the package dir (gateway/) which
+    # does not include the project root where `generated/` lives.
+    # Ensure the project root is on sys.path to allow `from generated import ...`.
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from generated import bluetap_pb2 as pb
 from generated import bluetap_pb2_grpc as rpc
 
@@ -36,9 +43,10 @@ class MetadataDB:
         return cur.fetchone()
 
 class GatewayServicer(rpc.GatewayServicer):
-    def __init__(self, db: MetadataDB):
+    def __init__(self, db: MetadataDB, tokens: dict):
         self.db = db
-        self.tokens = {}
+        # Share tokens dict so auth service and gateway can both validate tokens
+        self.tokens = tokens
     def PutMeta(self, request, context):
         token = request.token
         if token not in self.tokens:
@@ -59,6 +67,9 @@ class GatewayServicer(rpc.GatewayServicer):
         node = request.node
         self.db.register_node(node.node_id, node.ip, node.port, node.capacity_bytes)
         return pb.RegisterNodeResponse(ok=True, message="registered")
+class AuthServicer(rpc.AuthServiceServicer):
+    def __init__(self, tokens: dict):
+        self.tokens = tokens
     def Login(self, request, context):
         token = str(uuid.uuid4())
         self.tokens[token] = {"user": request.username, "created": time.time()}
@@ -67,7 +78,9 @@ class GatewayServicer(rpc.GatewayServicer):
 def serve(address="[::]:50051"):
     db = MetadataDB()
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    rpc.add_GatewayServicer_to_server(GatewayServicer(db), server)
+    tokens = {}
+    rpc.add_GatewayServicer_to_server(GatewayServicer(db, tokens), server)
+    rpc.add_AuthServiceServicer_to_server(AuthServicer(tokens), server)
     server.add_insecure_port(address)
     server.start()
     print("Gateway running on", address)

@@ -3,7 +3,12 @@
 import grpc
 import warnings
 
-import bluetap_pb2 as bluetap__pb2
+try:
+        # Prefer package-relative import when used as part of the `generated` package
+        from . import bluetap_pb2 as bluetap__pb2
+except Exception:
+        # Fall back to top-level import to retain compatibility when used differently
+        import bluetap_pb2 as bluetap__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__

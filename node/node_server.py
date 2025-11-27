@@ -1,5 +1,9 @@
-import grpc, time, argparse, os
+import grpc, time, argparse, os, sys
 from concurrent import futures
+if __package__ is None:
+    # When executed via `python node/node_server.py`, ensure project root is on sys.path
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from generated import bluetap_pb2 as pb
 from generated import bluetap_pb2_grpc as rpc
 from virtual_disk import VirtualDisk

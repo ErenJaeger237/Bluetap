@@ -2,9 +2,13 @@ import sqlite3
 import os
 import uuid
 import time
+import sys
 from concurrent import futures
 import grpc
 import threading
+
+if __package__ is None:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from generated import bluetap_pb2 as pb
 from generated import bluetap_pb2_grpc as rpc
