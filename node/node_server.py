@@ -5,8 +5,8 @@ import socket
 import time
 import os
 
-import bluetap_pb2 as pb
-import bluetap_pb2_grpc as rpc
+from generated import bluetap_pb2 as pb
+from generated import bluetap_pb2_grpc as rpc
 
 from virtual_disk import VirtualDisk
 import hashlib

@@ -6,8 +6,8 @@ from concurrent import futures
 import grpc
 import threading
 
-import bluetap_pb2 as pb
-import bluetap_pb2_grpc as rpc
+from generated import bluetap_pb2 as pb
+from generated import bluetap_pb2_grpc as rpc
 
 DB_PATH = os.environ.get("BLUETAP_META_DB", "gateway_meta.db")
 

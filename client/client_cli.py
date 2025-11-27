@@ -4,9 +4,9 @@ import sys
 import hashlib
 import math
 import argparse
+from generated import bluetap_pb2 as pb
 
-import bluetap_pb2 as pb
-import bluetap_pb2_grpc as rpc
+from generated import bluetap_pb2_grpc as rpc
 
 CHUNK_SIZE_DEFAULT = 512 * 1024  # 512 KB
 
