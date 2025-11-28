@@ -25,207 +25,6 @@ if _version_not_supported:
     )
 
 
-class AuthServiceStub(object):
-    """Missing associated documentation comment in .proto file."""
-
-    def __init__(self, channel):
-        """Constructor.
-
-        Args:
-            channel: A grpc.Channel.
-        """
-        self.Login = channel.unary_unary(
-                '/bluetap.v1.AuthService/Login',
-                request_serializer=bluetap__pb2.LoginRequest.SerializeToString,
-                response_deserializer=bluetap__pb2.LoginResponse.FromString,
-                _registered_method=True)
-        self.RequestOTP = channel.unary_unary(
-                '/bluetap.v1.AuthService/RequestOTP',
-                request_serializer=bluetap__pb2.RequestOTPRequest.SerializeToString,
-                response_deserializer=bluetap__pb2.RequestOTPResponse.FromString,
-                _registered_method=True)
-        self.VerifyOTP = channel.unary_unary(
-                '/bluetap.v1.AuthService/VerifyOTP',
-                request_serializer=bluetap__pb2.VerifyOTPRequest.SerializeToString,
-                response_deserializer=bluetap__pb2.VerifyOTPResponse.FromString,
-                _registered_method=True)
-        self.ValidateToken = channel.unary_unary(
-                '/bluetap.v1.AuthService/ValidateToken',
-                request_serializer=bluetap__pb2.ValidateTokenRequest.SerializeToString,
-                response_deserializer=bluetap__pb2.ValidateTokenResponse.FromString,
-                _registered_method=True)
-
-
-class AuthServiceServicer(object):
-    """Missing associated documentation comment in .proto file."""
-
-    def Login(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def RequestOTP(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def VerifyOTP(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-    def ValidateToken(self, request, context):
-        """Missing associated documentation comment in .proto file."""
-        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
-        context.set_details('Method not implemented!')
-        raise NotImplementedError('Method not implemented!')
-
-
-def add_AuthServiceServicer_to_server(servicer, server):
-    rpc_method_handlers = {
-            'Login': grpc.unary_unary_rpc_method_handler(
-                    servicer.Login,
-                    request_deserializer=bluetap__pb2.LoginRequest.FromString,
-                    response_serializer=bluetap__pb2.LoginResponse.SerializeToString,
-            ),
-            'RequestOTP': grpc.unary_unary_rpc_method_handler(
-                    servicer.RequestOTP,
-                    request_deserializer=bluetap__pb2.RequestOTPRequest.FromString,
-                    response_serializer=bluetap__pb2.RequestOTPResponse.SerializeToString,
-            ),
-            'VerifyOTP': grpc.unary_unary_rpc_method_handler(
-                    servicer.VerifyOTP,
-                    request_deserializer=bluetap__pb2.VerifyOTPRequest.FromString,
-                    response_serializer=bluetap__pb2.VerifyOTPResponse.SerializeToString,
-            ),
-            'ValidateToken': grpc.unary_unary_rpc_method_handler(
-                    servicer.ValidateToken,
-                    request_deserializer=bluetap__pb2.ValidateTokenRequest.FromString,
-                    response_serializer=bluetap__pb2.ValidateTokenResponse.SerializeToString,
-            ),
-    }
-    generic_handler = grpc.method_handlers_generic_handler(
-            'bluetap.v1.AuthService', rpc_method_handlers)
-    server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('bluetap.v1.AuthService', rpc_method_handlers)
-
-
- # This class is part of an EXPERIMENTAL API.
-class AuthService(object):
-    """Missing associated documentation comment in .proto file."""
-
-    @staticmethod
-    def Login(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bluetap.v1.AuthService/Login',
-            bluetap__pb2.LoginRequest.SerializeToString,
-            bluetap__pb2.LoginResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def RequestOTP(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bluetap.v1.AuthService/RequestOTP',
-            bluetap__pb2.RequestOTPRequest.SerializeToString,
-            bluetap__pb2.RequestOTPResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def VerifyOTP(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bluetap.v1.AuthService/VerifyOTP',
-            bluetap__pb2.VerifyOTPRequest.SerializeToString,
-            bluetap__pb2.VerifyOTPResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-    @staticmethod
-    def ValidateToken(request,
-            target,
-            options=(),
-            channel_credentials=None,
-            call_credentials=None,
-            insecure=False,
-            compression=None,
-            wait_for_ready=None,
-            timeout=None,
-            metadata=None):
-        return grpc.experimental.unary_unary(
-            request,
-            target,
-            '/bluetap.v1.AuthService/ValidateToken',
-            bluetap__pb2.ValidateTokenRequest.SerializeToString,
-            bluetap__pb2.ValidateTokenResponse.FromString,
-            options,
-            channel_credentials,
-            insecure,
-            call_credentials,
-            compression,
-            wait_for_ready,
-            timeout,
-            metadata,
-            _registered_method=True)
-
-
 class GatewayStub(object):
     """Missing associated documentation comment in .proto file."""
 
@@ -255,13 +54,34 @@ class GatewayStub(object):
                 request_serializer=bluetap__pb2.RegisterNodeRequest.SerializeToString,
                 response_deserializer=bluetap__pb2.RegisterNodeResponse.FromString,
                 _registered_method=True)
+        self.Login = channel.unary_unary(
+                '/bluetap.v1.Gateway/Login',
+                request_serializer=bluetap__pb2.LoginRequest.SerializeToString,
+                response_deserializer=bluetap__pb2.LoginResponse.FromString,
+                _registered_method=True)
+        self.RequestOTP = channel.unary_unary(
+                '/bluetap.v1.Gateway/RequestOTP',
+                request_serializer=bluetap__pb2.RequestOTPRequest.SerializeToString,
+                response_deserializer=bluetap__pb2.RequestOTPResponse.FromString,
+                _registered_method=True)
+        self.VerifyOTP = channel.unary_unary(
+                '/bluetap.v1.Gateway/VerifyOTP',
+                request_serializer=bluetap__pb2.VerifyOTPRequest.SerializeToString,
+                response_deserializer=bluetap__pb2.VerifyOTPResponse.FromString,
+                _registered_method=True)
+        self.ValidateToken = channel.unary_unary(
+                '/bluetap.v1.Gateway/ValidateToken',
+                request_serializer=bluetap__pb2.ValidateTokenRequest.SerializeToString,
+                response_deserializer=bluetap__pb2.ValidateTokenResponse.FromString,
+                _registered_method=True)
 
 
 class GatewayServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def PutMeta(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """File Management RPCs
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -279,6 +99,31 @@ class GatewayServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def RegisterNode(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def Login(self, request, context):
+        """Authentication RPCs (Moved from AuthService)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def RequestOTP(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def VerifyOTP(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ValidateToken(self, request, context):
         """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -306,6 +151,26 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.RegisterNode,
                     request_deserializer=bluetap__pb2.RegisterNodeRequest.FromString,
                     response_serializer=bluetap__pb2.RegisterNodeResponse.SerializeToString,
+            ),
+            'Login': grpc.unary_unary_rpc_method_handler(
+                    servicer.Login,
+                    request_deserializer=bluetap__pb2.LoginRequest.FromString,
+                    response_serializer=bluetap__pb2.LoginResponse.SerializeToString,
+            ),
+            'RequestOTP': grpc.unary_unary_rpc_method_handler(
+                    servicer.RequestOTP,
+                    request_deserializer=bluetap__pb2.RequestOTPRequest.FromString,
+                    response_serializer=bluetap__pb2.RequestOTPResponse.SerializeToString,
+            ),
+            'VerifyOTP': grpc.unary_unary_rpc_method_handler(
+                    servicer.VerifyOTP,
+                    request_deserializer=bluetap__pb2.VerifyOTPRequest.FromString,
+                    response_serializer=bluetap__pb2.VerifyOTPResponse.SerializeToString,
+            ),
+            'ValidateToken': grpc.unary_unary_rpc_method_handler(
+                    servicer.ValidateToken,
+                    request_deserializer=bluetap__pb2.ValidateTokenRequest.FromString,
+                    response_serializer=bluetap__pb2.ValidateTokenResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -416,6 +281,114 @@ class Gateway(object):
             '/bluetap.v1.Gateway/RegisterNode',
             bluetap__pb2.RegisterNodeRequest.SerializeToString,
             bluetap__pb2.RegisterNodeResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def Login(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bluetap.v1.Gateway/Login',
+            bluetap__pb2.LoginRequest.SerializeToString,
+            bluetap__pb2.LoginResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def RequestOTP(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bluetap.v1.Gateway/RequestOTP',
+            bluetap__pb2.RequestOTPRequest.SerializeToString,
+            bluetap__pb2.RequestOTPResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def VerifyOTP(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bluetap.v1.Gateway/VerifyOTP',
+            bluetap__pb2.VerifyOTPRequest.SerializeToString,
+            bluetap__pb2.VerifyOTPResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ValidateToken(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/bluetap.v1.Gateway/ValidateToken',
+            bluetap__pb2.ValidateTokenRequest.SerializeToString,
+            bluetap__pb2.ValidateTokenResponse.FromString,
             options,
             channel_credentials,
             insecure,

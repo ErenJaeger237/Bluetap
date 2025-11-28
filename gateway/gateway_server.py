@@ -12,10 +12,10 @@ if __package__ is None:
 
 from generated import bluetap_pb2 as pb
 from generated import bluetap_pb2_grpc as rpc
+from gateway.db import MetadataDB
 
-DB_PATH = os.environ.get("BLUETAP_META_DB", "gateway_meta.db")
+DB_PATH = "gateway_meta.db"
 
-# --- Simple metadata/registry wrapper ---
 class MetadataDB:
     def __init__(self, path=DB_PATH):
         self.conn = sqlite3.connect(path, check_same_thread=False)
@@ -23,15 +23,43 @@ class MetadataDB:
 
     def _init(self):
         cur = self.conn.cursor()
-        cur.execute("""CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY, password TEXT, email TEXT
-        )""")
-        cur.execute("""CREATE TABLE IF NOT EXISTS nodes (
-            node_id TEXT PRIMARY KEY, ip TEXT, port INTEGER, capacity INTEGER, last_seen REAL
-        )""")
-        cur.execute("""CREATE TABLE IF NOT EXISTS files (
-            upload_id TEXT PRIMARY KEY, filename TEXT, owner TEXT, filesize INTEGER, chunk_size INTEGER, total_chunks INTEGER, nodes TEXT, created REAL
-        )""")
+
+        # ========== USERS TABLE ==========
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password TEXT,
+            email TEXT
+        )
+        """)
+
+        # ========== NODES TABLE (FIXED) ==========
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS nodes (
+            node_id TEXT PRIMARY KEY,
+            ip TEXT,
+            port INTEGER,
+            capacity_bytes INTEGER,
+            metadata TEXT,
+            last_seen REAL
+        )
+        """)
+
+        # ========== FILES TABLE (FIXED) ==========
+        # stores metadata returned by PutMeta
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS files (
+            upload_id TEXT PRIMARY KEY,
+            filename TEXT,
+            owner TEXT,
+            filesize INTEGER,
+            chunk_size INTEGER,
+            total_chunks INTEGER,
+            nodes_json TEXT,   -- JSON encoded NodeInfo list
+            created REAL
+        )
+        """)
+
         self.conn.commit()
 
     # user helpers

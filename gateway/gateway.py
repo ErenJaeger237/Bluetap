@@ -1,51 +1,128 @@
 # gateway/gateway.py
-import os, time, uuid, sqlite3
+import os, time, uuid, sqlite3, hashlib
 from concurrent import futures
 import grpc
 from generated import bluetap_pb2 as pb
 from generated import bluetap_pb2_grpc as rpc
 
-DB_PATH = os.environ.get("BLUETAP_META_DB", "gateway_meta.db")
+from gateway.db import MetadataDB
+
+DB_PATH = "gateway_meta.db"
 
 class MetadataDB:
     def __init__(self, path=DB_PATH):
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self._init()
+
     def _init(self):
         cur = self.conn.cursor()
-        cur.execute("""CREATE TABLE IF NOT EXISTS nodes (
-            node_id TEXT PRIMARY KEY, ip TEXT, port INTEGER, capacity INTEGER, last_seen REAL, metadata TEXT)""")
-        cur.execute("""CREATE TABLE IF NOT EXISTS files (
-            upload_id TEXT PRIMARY KEY, filename TEXT, owner TEXT, filesize INTEGER,
-            chunk_size INTEGER, total_chunks INTEGER, nodes TEXT, created REAL)""")
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT PRIMARY KEY,
+            password_hash TEXT,
+            email TEXT,
+            otp_code TEXT,
+            otp_expiry REAL,
+            token TEXT,
+            token_expiry REAL
+        )
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS nodes (
+            node_id TEXT PRIMARY KEY,
+            ip TEXT, port INTEGER, capacity INTEGER,
+            last_seen REAL
+        )
+        """)
+
+        cur.execute("""
+        CREATE TABLE IF NOT EXISTS files (
+            upload_id TEXT PRIMARY KEY,
+            filename TEXT, owner TEXT, filesize INTEGER,
+            chunk_size INTEGER, total_chunks INTEGER,
+            nodes TEXT, created REAL
+        )
+        """)
+
         self.conn.commit()
-    def register_node(self, node_id, ip, port, capacity, metadata=""):
+
+    # ------------- USER CREATION -----------------
+    def create_user(self, username, password, email):
+        pw_hash = hashlib.sha256(password.encode()).hexdigest()
         cur = self.conn.cursor()
-        cur.execute("INSERT OR REPLACE INTO nodes(node_id,ip,port,capacity,last_seen,metadata) VALUES (?,?,?,?,?,?)",
-                    (node_id, ip, port, capacity, time.time(), metadata))
+        cur.execute("INSERT OR REPLACE INTO users VALUES (?, ?, ?, NULL, NULL, NULL, NULL)",
+                    (username, pw_hash, email))
         self.conn.commit()
-    def list_nodes(self):
+
+    # ------------- PASSWORD CHECK -----------------
+    def verify_password(self, username, password):
+        pw_hash = hashlib.sha256(password.encode()).hexdigest()
         cur = self.conn.cursor()
-        cur.execute("SELECT node_id,ip,port,capacity,last_seen,metadata FROM nodes ORDER BY last_seen DESC")
-        return cur.fetchall()
-    def save_file_metadata(self, upload_id, filename, owner, filesize, chunk_size, total_chunks, nodes):
+        cur.execute("SELECT password_hash FROM users WHERE username=?", (username,))
+        row = cur.fetchone()
+        if not row:
+            return False
+        return row[0] == pw_hash
+
+    # ------------- OTP ----------------------------
+    def save_otp(self, username, otp):
+        expiry = time.time() + 300  # OTP valid for 5 minutes
         cur = self.conn.cursor()
-        cur.execute("INSERT OR REPLACE INTO files(upload_id,filename,owner,filesize,chunk_size,total_chunks,nodes,created) VALUES (?,?,?,?,?,?,?,?)",
-                    (upload_id, filename, owner, filesize, chunk_size, total_chunks, ",".join(nodes), time.time()))
+        cur.execute("UPDATE users SET otp_code=?, otp_expiry=? WHERE username=?",
+                    (otp, expiry, username))
         self.conn.commit()
-    def get_file_by_filename(self, filename):
+
+    def verify_otp(self, username, code):
         cur = self.conn.cursor()
-        cur.execute("SELECT upload_id,filename,filesize,chunk_size,total_chunks,nodes,created FROM files WHERE filename=?", (filename,))
-        return cur.fetchone()
-    def list_files_for_user(self, owner, limit=50, offset=0):
+        cur.execute("SELECT otp_code, otp_expiry FROM users WHERE username=?", (username,))
+        row = cur.fetchone()
+        if not row:
+            return False, "User not found"
+
+        otp, expiry = row
+        if otp != code:
+            return False, "Invalid OTP"
+        if time.time() > expiry:
+            return False, "OTP expired"
+
+        return True, "OK"
+
+    # ------------- TOKEN MANAGEMENT ---------------
+    def save_token(self, username, token):
+        expiry = time.time() + 3600  # 1 hour
         cur = self.conn.cursor()
-        cur.execute("SELECT filename,upload_id,filesize,created FROM files WHERE owner=? LIMIT ? OFFSET ?", (owner, limit, offset))
-        return cur.fetchall()
+        cur.execute("UPDATE users SET token=?, token_expiry=? WHERE username=?",
+                    (token, expiry, username))
+        self.conn.commit()
+
+    def validate_token(self, token):
+        cur = self.conn.cursor()
+        cur.execute("SELECT username, token_expiry FROM users WHERE token=?", (token,))
+        row = cur.fetchone()
+        if not row:
+            return False, None
+        user, expiry = row
+        if time.time() > expiry:
+            return False, None
+        return True, user
 
 class GatewayServicer(rpc.GatewayServicer):
     def __init__(self, db: MetadataDB):
         self.db = db
         self.tokens = {}  # token -> {user, created}
+
+    def _check_auth(self, context):
+        try:
+            metadata = dict(context.invocation_metadata())
+            token = metadata.get('authorization', '').replace('Bearer ', '')
+            if not token or token not in self.tokens:
+                return False, "Invalid or missing token"
+            return True, self.tokens[token]["user"]
+        except Exception as e:
+            return False, str(e)
+
     # Auth
     def Login(self, request, context):
         # Very simple: accept any username/password, return token in message
@@ -61,27 +138,22 @@ class GatewayServicer(rpc.GatewayServicer):
 
     # Put meta: create upload record and choose nodes (coordinator reads DB directly)
     def PutMeta(self, request, context):
-        token = request.token
-        if token not in self.tokens:
-            context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
-        upload_id = str(uuid.uuid4())
-        total_chunks = (request.filesize + request.chunk_size - 1) // request.chunk_size
+        # --- SECURITY CHECK ---
+        is_valid, user_or_error = self._check_auth(context)
+        if not is_valid:
+            context.abort(grpc.StatusCode.UNAUTHENTICATED, f"⛔ {user_or_error}")
+        # ----------------------
 
-        # Read nodes from DB and select top 'replication' by capacity
-        nodes_rows = self.db.list_nodes()
-        if not nodes_rows:
-            context.abort(grpc.StatusCode.UNAVAILABLE, "no nodes available")
+        print(f"[*] Authenticated upload request from: {user_or_error}")
+        print(f"[*] File: {request.filename}, Size: {request.size}")
 
-        # Simple selection: choose first `replication` nodes
-        selected = []
-        for r in nodes_rows[: max(1, request.replication)]:
-            node_id, ip, port, capacity, last_seen, metadata = r
-            selected.append(pb.NodeInfo(node_id=node_id, ip=ip, port=port, capacity_bytes=capacity, metadata=metadata))
-
-        owner = self.tokens[token]["user"]
-        self.db.save_file_metadata(upload_id, request.filename, owner, request.filesize, request.chunk_size, total_chunks, [n.node_id for n in selected])
-
-        return pb.PutMetaResponse(upload_id=upload_id, nodes=selected, total_chunks=total_chunks, chunk_size=request.chunk_size, message="ok")
+        # ... (The rest of your existing logic for choosing nodes/upload_id) ...
+        
+        return pb.PutMetaResponse(
+            ok=True,
+            upload_id=str(uuid.uuid4()), # Example ID
+            nodes=[] # Add your node logic here
+        )
 
     def GetMeta(self, request, context):
         token = request.token
@@ -102,22 +174,11 @@ class GatewayServicer(rpc.GatewayServicer):
                     break
         fileloc = pb.FileLocation(upload_id=upload_id, nodes=nodes, filesize=filesize, chunk_size=chunk_size, total_chunks=total_chunks, filename=filename, owner=self.tokens[token]["user"])
         return pb.GetMetaResponse(file=fileloc)
-
-    def ListFiles(self, request, context):
-        token = request.token
-        if token not in self.tokens:
-            context.abort(grpc.StatusCode.UNAUTHENTICATED, "invalid token")
-        owner = self.tokens[token]["user"]
-        rows = self.db.list_files_for_user(owner, limit=request.limit or 50, offset=request.offset or 0)
-        summaries = []
-        for filename, upload_id, filesize, created in rows:
-            summaries.append(pb.FileSummary(filename=filename, upload_id=upload_id, filesize=filesize, created_at=str(created)))
-        return pb.ListFilesResponse(files=summaries, total=len(summaries))
-
 def serve(address="[::]:50052"):
     db = MetadataDB()
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=12))
     rpc.add_GatewayServicer_to_server(GatewayServicer(db), server)
+    rpc.add_AuthServiceServicer_to_server(AuthService(), server)
     server.add_insecure_port(address)
     server.start()
     print("Gateway running on", address)
@@ -129,4 +190,3 @@ def serve(address="[::]:50052"):
 
 if __name__ == "__main__":
     serve()
-
