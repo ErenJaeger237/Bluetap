@@ -9,47 +9,10 @@ from gateway.db import MetadataDB
 
 DB_PATH = "gateway_meta.db"
 
-class MetadataDB:
-    def __init__(self, path=DB_PATH):
-        self.conn = sqlite3.connect(path, check_same_thread=False)
-        self._init()
 
-    def _init(self):
-        cur = self.conn.cursor()
-
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            username TEXT PRIMARY KEY,
-            password_hash TEXT,
-            email TEXT,
-            otp_code TEXT,
-            otp_expiry REAL,
-            token TEXT,
-            token_expiry REAL
-        )
-        """)
-
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS nodes (
-            node_id TEXT PRIMARY KEY,
-            ip TEXT, port INTEGER, capacity INTEGER,
-            last_seen REAL
-        )
-        """)
-
-        cur.execute("""
-        CREATE TABLE IF NOT EXISTS files (
-            upload_id TEXT PRIMARY KEY,
-            filename TEXT, owner TEXT, filesize INTEGER,
-            chunk_size INTEGER, total_chunks INTEGER,
-            nodes TEXT, created REAL
-        )
-        """)
-
-        self.conn.commit()
 
     # ------------- USER CREATION -----------------
-    def create_user(self, username, password, email):
+def create_user(self, username, password, email):
         pw_hash = hashlib.sha256(password.encode()).hexdigest()
         cur = self.conn.cursor()
         cur.execute("INSERT OR REPLACE INTO users VALUES (?, ?, ?, NULL, NULL, NULL, NULL)",
@@ -57,7 +20,7 @@ class MetadataDB:
         self.conn.commit()
 
     # ------------- PASSWORD CHECK -----------------
-    def verify_password(self, username, password):
+def verify_password(self, username, password):
         pw_hash = hashlib.sha256(password.encode()).hexdigest()
         cur = self.conn.cursor()
         cur.execute("SELECT password_hash FROM users WHERE username=?", (username,))
@@ -67,14 +30,14 @@ class MetadataDB:
         return row[0] == pw_hash
 
     # ------------- OTP ----------------------------
-    def save_otp(self, username, otp):
+def save_otp(self, username, otp):
         expiry = time.time() + 300  # OTP valid for 5 minutes
         cur = self.conn.cursor()
         cur.execute("UPDATE users SET otp_code=?, otp_expiry=? WHERE username=?",
                     (otp, expiry, username))
         self.conn.commit()
 
-    def verify_otp(self, username, code):
+def verify_otp(self, username, code):
         cur = self.conn.cursor()
         cur.execute("SELECT otp_code, otp_expiry FROM users WHERE username=?", (username,))
         row = cur.fetchone()
@@ -90,14 +53,14 @@ class MetadataDB:
         return True, "OK"
 
     # ------------- TOKEN MANAGEMENT ---------------
-    def save_token(self, username, token):
+def save_token(self, username, token):
         expiry = time.time() + 3600  # 1 hour
         cur = self.conn.cursor()
         cur.execute("UPDATE users SET token=?, token_expiry=? WHERE username=?",
                     (token, expiry, username))
         self.conn.commit()
 
-    def validate_token(self, token):
+def validate_token(self, token):
         cur = self.conn.cursor()
         cur.execute("SELECT username, token_expiry FROM users WHERE token=?", (token,))
         row = cur.fetchone()
@@ -174,12 +137,16 @@ class GatewayServicer(rpc.GatewayServicer):
                     break
         fileloc = pb.FileLocation(upload_id=upload_id, nodes=nodes, filesize=filesize, chunk_size=chunk_size, total_chunks=total_chunks, filename=filename, owner=self.tokens[token]["user"])
         return pb.GetMetaResponse(file=fileloc)
-def serve(address="[::]:50052"):
+# C:\Users\NTS\Documents\bluetap\gateway\gateway.py
+def serve(address="[::]:50051"):
     db = MetadataDB()
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=12))
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+    
+    # KEEP THIS CORRECT LINE:
     rpc.add_GatewayServicer_to_server(GatewayServicer(db), server)
-    rpc.add_AuthServiceServicer_to_server(AuthService(), server)
+    
     server.add_insecure_port(address)
+    # ... rest of function
     server.start()
     print("Gateway running on", address)
     try:

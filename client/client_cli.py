@@ -10,7 +10,7 @@ CHUNK_SIZE_DEFAULT = 512 * 1024
 def login(gateway_addr, username):
     """Step 1: Ask Gateway to send an OTP."""
     channel = grpc.insecure_channel(gateway_addr)
-    stub = rpc.GatewayServiceStub(channel)
+    stub = rpc.GatewayStub(channel)
     print(f"[*] Requesting OTP for {username}...")
     try:
         # Note: Check if your proto uses RequestOTPRequest or LoginRequest
@@ -35,7 +35,7 @@ def verify_otp(gateway_addr, username):
     otp_code = input("📩 Enter the 6-digit OTP: ")
     
     channel = grpc.insecure_channel(gateway_addr)
-    stub = rpc.GatewayServiceStub(channel)
+    stub = rpc.GatewayStub(channel)
     
     try:
         response = stub.VerifyOTP(pb.VerifyOTPRequest(username=username, otp_code=otp_code))
@@ -63,7 +63,7 @@ def put_file(gateway_addr, filepath):
     filesize = os.path.getsize(filepath)
     
     channel = grpc.insecure_channel(gateway_addr)
-    stub = rpc.GatewayServiceStub(channel)
+    stub = rpc.GatewayStub(channel)
 
     print(f"[*] Uploading {filename}...")
     
