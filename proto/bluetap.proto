@@ -44,7 +44,7 @@ service Gateway {
   rpc PutMeta (PutMetaRequest) returns (PutMetaResponse);
   rpc GetMeta (GetMetaRequest) returns (GetMetaResponse);
   rpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
-  rpc.RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
+  rpc RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
 }
 
 message PutMetaRequest {

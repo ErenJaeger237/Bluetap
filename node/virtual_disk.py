@@ -1,3 +1,4 @@
+# node/virtual_disk.py
 import os, json, hashlib
 from pathlib import Path
 
@@ -22,21 +23,29 @@ class VirtualDisk:
         with open(p, "r", encoding="utf-8") as f:
             return json.load(f)
     def write_chunk(self, upload_id, chunk_id, data, checksum_hex):
+        # verify checksum
         h = hashlib.sha256(data).hexdigest()
         if h != checksum_hex:
             return False
         dirpath = self._chunks_dir(upload_id)
-        tmp = dirpath / f".{chunk_id}.tmp"
         final = dirpath / f"{chunk_id:08d}.chunk"
-        with open(tmp, "wb") as f:
-            f.write(data); f.flush(); os.fsync(f.fileno())
-        os.replace(tmp, final)
-        manifest = self._load_manifest(upload_id)
-        manifest["received"][chunk_id] = True
-        manifest["checksums"][chunk_id] = checksum_hex
+        with open(final, "wb") as f:
+            f.write(data)
+        m = self._load_or_create_manifest(upload_id)
+        m["received"][chunk_id] = True
+        m["checksums"][chunk_id] = checksum_hex
         with open(self._manifest_path(upload_id), "w", encoding="utf-8") as f:
-            json.dump(manifest, f)
+            json.dump(m, f)
         return True
+    def _load_or_create_manifest(self, upload_id):
+        p = self._manifest_path(upload_id)
+        if not p.exists():
+            # create very small manifest fallback
+            manifest = {"upload_id": upload_id, "filename":"unknown", "filesize":0, "chunk_size":0, "total_chunks":0, "received":[], "checksums":[]}
+            with open(p, "w", encoding="utf-8") as f:
+                json.dump(manifest, f)
+            return manifest
+        return self._load_manifest(upload_id)
     def is_complete(self, upload_id):
         m = self._load_manifest(upload_id)
         return all(bool(r) for r in m["received"])
@@ -44,7 +53,5 @@ class VirtualDisk:
         return self._load_manifest(upload_id)["total_chunks"]
     def read_chunk(self, upload_id, chunk_id):
         path = self._chunks_dir(upload_id) / f"{chunk_id:08d}.chunk"
-        if not path.exists():
-            return None
-        with open(path, "rb") as f:
-            return f.read()
+        if not path.exists(): return None
+        with open(path, "rb") as f: return f.read()

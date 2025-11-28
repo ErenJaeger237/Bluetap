@@ -3,12 +3,7 @@
 import grpc
 import warnings
 
-try:
-        # Prefer package-relative import when used as part of the `generated` package
-        from . import bluetap_pb2 as bluetap__pb2
-except Exception:
-        # Fall back to top-level import to retain compatibility when used differently
-        import bluetap_pb2 as bluetap__pb2
+from . import bluetap_pb2 as bluetap__pb2
 
 GRPC_GENERATED_VERSION = '1.76.0'
 GRPC_VERSION = grpc.__version__
@@ -31,10 +26,7 @@ if _version_not_supported:
 
 
 class AuthServiceStub(object):
-    """--------------------
-    Authentication / OTP
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -65,35 +57,28 @@ class AuthServiceStub(object):
 
 
 class AuthServiceServicer(object):
-    """--------------------
-    Authentication / OTP
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def Login(self, request, context):
-        """Basic credential login -> server sends OTP or token depending on policy
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RequestOTP(self, request, context):
-        """Request OTP to be sent to user email/phone (gateway will send via OTP mechanism)
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def VerifyOTP(self, request, context):
-        """Verify OTP previously sent; returns auth token
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ValidateToken(self, request, context):
-        """Validate token
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -130,10 +115,7 @@ def add_AuthServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class AuthService(object):
-    """--------------------
-    Authentication / OTP
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def Login(request,
@@ -245,10 +227,7 @@ class AuthService(object):
 
 
 class GatewayStub(object):
-    """--------------------
-    Gateway API (Client -> Gateway)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -279,35 +258,28 @@ class GatewayStub(object):
 
 
 class GatewayServicer(object):
-    """--------------------
-    Gateway API (Client -> Gateway)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def PutMeta(self, request, context):
-        """Provide upload metadata and selected nodes for uploading
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetMeta(self, request, context):
-        """Get metadata for a file (where to download from)
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ListFiles(self, request, context):
-        """List user's files (simple)
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RegisterNode(self, request, context):
-        """For nodes to register themselves (gateway/coordinator endpoint)
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -344,10 +316,7 @@ def add_GatewayServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class Gateway(object):
-    """--------------------
-    Gateway API (Client -> Gateway)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def PutMeta(request,
@@ -459,10 +428,7 @@ class Gateway(object):
 
 
 class NodeServiceStub(object):
-    """--------------------
-    Node Service (runs on each storage node)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -493,36 +459,28 @@ class NodeServiceStub(object):
 
 
 class NodeServiceServicer(object):
-    """--------------------
-    Node Service (runs on each storage node)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def PutChunks(self, request_iterator, context):
-        """Client streams uploaded chunks to node.
-        Each stream message contains chunk bytes and metadata.
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetChunks(self, request, context):
-        """Server streams chunk messages back for a download request.
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def Heartbeat(self, request, context):
-        """Node heartbeat from node -> coordinator/gateway (unary for simplicity)
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def RepairTasks(self, request, context):
-        """Node asks for list of repairs or other orchestrations (optional)
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -559,10 +517,7 @@ def add_NodeServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class NodeService(object):
-    """--------------------
-    Node Service (runs on each storage node)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def PutChunks(request_iterator,
@@ -674,10 +629,7 @@ class NodeService(object):
 
 
 class CoordinatorStub(object):
-    """--------------------
-    Coordinator RPC (internal, optional)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -703,28 +655,22 @@ class CoordinatorStub(object):
 
 
 class CoordinatorServicer(object):
-    """--------------------
-    Coordinator RPC (internal, optional)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def SelectNodes(self, request, context):
-        """Coordinator selects nodes for a file upload.
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ScheduleRepair(self, request, context):
-        """Coordinator can instruct repair/replication jobs.
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def LookupFile(self, request, context):
-        """Lookup file -> returns nodes containing file
-        """
+        """Missing associated documentation comment in .proto file."""
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -756,10 +702,7 @@ def add_CoordinatorServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class Coordinator(object):
-    """--------------------
-    Coordinator RPC (internal, optional)
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def SelectNodes(request,
@@ -844,10 +787,7 @@ class Coordinator(object):
 
 
 class UploadStateStub(object):
-    """--------------------
-    Upload resume helper messages
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
         """Constructor.
@@ -873,10 +813,7 @@ class UploadStateStub(object):
 
 
 class UploadStateServicer(object):
-    """--------------------
-    Upload resume helper messages
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     def CreateUploadRecord(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -923,10 +860,7 @@ def add_UploadStateServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class UploadState(object):
-    """--------------------
-    Upload resume helper messages
-    --------------------
-    """
+    """Missing associated documentation comment in .proto file."""
 
     @staticmethod
     def CreateUploadRecord(request,
