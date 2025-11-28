@@ -107,7 +107,50 @@ class GatewayServicer(rpc.GatewayServicer):
         token = str(uuid.uuid4())
         self.tokens[token] = {"user": request.username, "created": time.time()}
         return pb.AuthResponse(token=token, message="Logged in (demo token)")
+# C:\Users\NTS\Documents\bluetap\gateway\gateway.py (Add inside class GatewayServicer)
 
+    # --- NEW AUTHENTICATION RPCs ---
+    def RequestOTP(self, request, context):
+        """Generates a pseudo-OTP and stores it."""
+        # Check if user exists (or create if demo)
+        self.db.add_user(request.username, "demo_pass", "") 
+        
+        # Generate a simple 6-digit code (use UUID for strong randomness)
+        otp_code = str(uuid.uuid4().int % 1000000).zfill(6) 
+        
+        # Store OTP and timestamp in the ephemeral 'self.otps' dictionary
+        self.otps[request.username] = {"code": otp_code, "created": time.time()}
+        
+        # LOGGING IT SO YOU CAN SEE IT IN THE SERVER TERMINAL
+        print(f"🔐 [OTP GENERATED for {request.username}]: {otp_code}")
+        
+        return pb.RequestOTPResponse(ok=True, message="OTP sent to server logs")
+
+    def VerifyOTP(self, request, context):
+        """Verifies the OTP and issues a token."""
+        user_otp_data = self.otps.get(request.username)
+        
+        if not user_otp_data:
+            return pb.VerifyOTPResponse(ok=False, message="OTP not requested.")
+
+        # Check for expiry (e.g., 5 minutes = 300 seconds)
+        if time.time() - user_otp_data["created"] > 300:
+            del self.otps[request.username] # Clean up
+            return pb.VerifyOTPResponse(ok=False, message="OTP expired.")
+        
+        if user_otp_data["code"] == request.otp_code:
+            # OTP correct! Issue Token
+            del self.otps[request.username] # OTP is one-time use
+            
+            token = str(uuid.uuid4())
+            self.tokens[token] = {"user": request.username, "created": time.time()}
+            
+            print(f"✅ User {request.username} logged in. Token issued.")
+            return pb.VerifyOTPResponse(ok=True, token=token, message="Verified")
+        else:
+            return pb.VerifyOTPResponse(ok=False, message="Invalid OTP code.")
+
+    # --- END NEW AUTHENTICATION RPCs ---
     def PutMeta(self, request, context):
         # Very light validation
         token = request.token
