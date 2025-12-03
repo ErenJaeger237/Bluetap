@@ -132,3 +132,14 @@ def put_file(gateway_addr, filepath):
             print(f"\n   ❌ Error uploading to this node: {e.details()}")
 
     print("\n✅ All replications processed.")
+
+    # ... (existing code) ...
+
+def set_token(token):
+    """Helper to set the session token from an external script."""
+    global SESSION_TOKEN
+    SESSION_TOKEN = token
+    
+def get_token():
+    """Helper to get the current token."""
+    return SESSION_TOKEN
