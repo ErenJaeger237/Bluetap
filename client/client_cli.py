@@ -70,19 +70,20 @@ def put_file(gateway_addr, filepath):
     filename = os.path.basename(filepath)
     filesize = os.path.getsize(filepath)
     
-    # 1. Ask Gateway for Metadata/Permission
-    print(f"[*] Requesting upload metadata for {filename}...")
+    # --- STEP 1: Ask Gateway for Permission (With Replication) ---
+    print(f"[*] Requesting upload metadata for {filename} (Replication=2)...")
     channel = grpc.insecure_channel(gateway_addr)
     gateway_stub = rpc.GatewayStub(channel)
 
     try:
+        # REQUEST REPLICATION = 2 HERE
         meta_resp = gateway_stub.PutMeta(
             pb.PutMetaRequest(
                 token=SESSION_TOKEN, 
                 filename=filename, 
                 filesize=filesize,
-                chunk_size=524288, # 512KB
-                replication=1
+                chunk_size=524288,
+                replication=2  # <--- CHANGED FROM 1 TO 2
             )
         )
     except grpc.RpcError as e:
@@ -96,91 +97,38 @@ def put_file(gateway_addr, filepath):
         print("❌ Error: Gateway returned no storage nodes.")
         return
 
-    # 2. Upload Data to the Storage Node
-    target_node = nodes[0]
-    node_addr = f"{target_node.ip}:{target_node.port}"
-    print(f"[*] Redirecting to Storage Node: {node_addr} (Upload ID: {upload_id})")
+    print(f"[*] Gateway assigned {len(nodes)} storage nodes.")
 
-    node_channel = grpc.insecure_channel(node_addr)
-    node_stub = rpc.NodeServiceStub(node_channel)
+    # --- STEP 2: Loop Through Nodes and Upload to Each ---
+    for i, target_node in enumerate(nodes):
+        node_addr = f"{target_node.ip}:{target_node.port}"
+        print(f"\n🚀 [Replica {i+1}/{len(nodes)}] Uploading to Node: {node_addr}")
 
-    def chunk_generator():
-        with open(filepath, "rb") as f:
-            chunk_id = 0
-            while True:
-                data = f.read(524288) # Read 512KB
-                if not data:
-                    break
-                checksum = hashlib.sha256(data).hexdigest()
-                yield pb.ChunkUpload(
-                    upload_id=upload_id, 
-                    filename=filename, 
-                    chunk_id=chunk_id, 
-                    data=data, 
-                    checksum=checksum
-                )
-                chunk_id += 1
-                print(f"   -> Sending chunk {chunk_id}...", end='\r')
+        node_channel = grpc.insecure_channel(node_addr)
+        node_stub = rpc.NodeServiceStub(node_channel)
 
-    try:
-        transfer_resp = node_stub.PutChunks(chunk_generator())
-        print(f"\n✅ Upload Result: {transfer_resp.message}")
-        
-    except grpc.RpcError as e:
-        print(f"\n❌ Node Transfer Error: {e.details()}")
+        # We redefine the generator here so it opens the file fresh for every node
+        def chunk_generator():
+            with open(filepath, "rb") as f:
+                chunk_id = 0
+                while True:
+                    data = f.read(524288)
+                    if not data: break
+                    checksum = hashlib.sha256(data).hexdigest()
+                    yield pb.ChunkUpload(
+                        upload_id=upload_id, 
+                        filename=filename, 
+                        chunk_id=chunk_id, 
+                        data=data, 
+                        checksum=checksum
+                    )
+                    chunk_id += 1
+                    print(f"   -> Sending chunk {chunk_id}...", end='\r')
 
-# --- DOWNLOAD (This was missing!) ---
+        try:
+            transfer_resp = node_stub.PutChunks(chunk_generator())
+            print(f"\n   ✅ Success: {transfer_resp.message}")
+        except grpc.RpcError as e:
+            print(f"\n   ❌ Error uploading to this node: {e.details()}")
 
-def download_file(gateway_addr, filename, output_path):
-    global SESSION_TOKEN
-    
-    if not SESSION_TOKEN:
-        print("⛔ Error: You are not logged in.")
-        return False
-
-    # 1. Ask Gateway for Location
-    print(f"[*] Requesting download metadata for {filename}...")
-    channel = grpc.insecure_channel(gateway_addr)
-    gateway_stub = rpc.GatewayStub(channel)
-
-    try:
-        resp = gateway_stub.GetMeta(pb.GetMetaRequest(token=SESSION_TOKEN, filename=filename))
-    except grpc.RpcError as e:
-        print(f"❌ Gateway Error: {e.details()}")
-        return False
-
-    file_info = resp.file
-    if not file_info.nodes:
-        print("❌ Error: No nodes found for this file.")
-        return False
-
-    # 2. Download from Node
-    target_node = file_info.nodes[0]
-    node_addr = f"{target_node.ip}:{target_node.port}"
-    print(f"[*] Downloading from Node: {node_addr}")
-
-    node_channel = grpc.insecure_channel(node_addr)
-    node_stub = rpc.NodeServiceStub(node_channel)
-
-    try:
-        chunk_stream = node_stub.GetChunks(
-            pb.GetChunksRequest(
-                upload_id=file_info.upload_id,
-                start_chunk=0,
-                end_chunk=file_info.total_chunks
-            )
-        )
-        
-        with open(output_path, "wb") as f:
-            chunks_received = 0
-            for chunk in chunk_stream:
-                f.write(chunk.data)
-                chunks_received += 1
-                print(f"   <- Received chunk {chunk.chunk_id}...", end='\r')
-        
-        print(f"\n✅ Download Complete: {output_path} ({chunks_received} chunks)")
-        return True
-
-    except grpc.RpcError as e:
-        print(f"\n❌ Node Download Error: {e.details()}")
-        return False
+    print("\n✅ All replications processed.")
