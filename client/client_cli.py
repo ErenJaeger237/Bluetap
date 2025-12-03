@@ -3,7 +3,6 @@ import hashlib
 import os
 import sys
 
-# Adjust path to find generated modules
 if __package__ is None:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -12,105 +11,87 @@ from generated import bluetap_pb2_grpc as rpc
 
 SESSION_TOKEN = None
 
-# --- TOKEN HELPERS (Used by cli.py) ---
 def set_token(token):
-    """Helper to set the session token from an external script."""
     global SESSION_TOKEN
     SESSION_TOKEN = token
     
 def get_token():
-    """Helper to get the current token."""
     return SESSION_TOKEN
 
 # --- AUTHENTICATION ---
 
-def login(gateway_addr, username):
-    """Step 1: Ask Gateway to send an OTP."""
+def login(gateway_addr, username, email_or_phone=""):
+    """Request OTP, optionally sending it to email/phone."""
     channel = grpc.insecure_channel(gateway_addr)
     stub = rpc.GatewayStub(channel)
-    print(f"[*] Requesting OTP for {username}...")
+    print(f"[*] Requesting OTP for {username} (Contact: {email_or_phone or 'None'})...")
     try:
-        response = stub.RequestOTP(pb.RequestOTPRequest(username=username))
+        # Pass the email to the RequestOTP RPC
+        response = stub.RequestOTP(pb.RequestOTPRequest(
+            username=username, 
+            email_or_phone=email_or_phone
+        ))
         
         if response.ok:
-            # We don't print "Check logs" here because cli.py handles the UI
-            return True
+            return True, response.message
         else:
-            print(f"❌ Login failed: {response.message}")
-            return False
+            return False, response.message
             
     except grpc.RpcError as e:
-        print(f"❌ Connection error: {e.details()}")
-        return False
+        return False, str(e.details())
 
-def verify_otp(gateway_addr, username):
-    """Step 2: Send OTP to get the Token."""
+def verify_otp_and_get_token(gateway_addr, username, otp_code):
     global SESSION_TOKEN 
-    
-    otp_code = input("📩 Enter the 6-digit OTP: ")
-    
     channel = grpc.insecure_channel(gateway_addr)
     stub = rpc.GatewayStub(channel)
-    
     try:
         response = stub.VerifyOTP(pb.VerifyOTPRequest(username=username, otp_code=otp_code))
-        
         if response.ok and response.token:
             SESSION_TOKEN = response.token
-            return True
-        else:
-            print(f"❌ Verification failed: {response.message}")
-            return False
-            
+            return True, response.token
+        return False, response.message
     except grpc.RpcError as e:
-        print(f"❌ Error: {e.details()}")
-        return False
+        return False, str(e.details())
 
-# --- UPLOAD (With Replication) ---
+def verify_otp(gateway_addr, username):
+    """Interactive CLI version of verify."""
+    otp_code = input("📩 Enter the 6-digit OTP: ")
+    ok, token = verify_otp_and_get_token(gateway_addr, username, otp_code)
+    if ok:
+        print(f"✅ Authentication Successful!")
+        return True
+    print(f"❌ Verification failed.")
+    return False
 
-def put_file(gateway_addr, filepath):
-    global SESSION_TOKEN
-    
-    if not SESSION_TOKEN:
-        print("⛔ Error: You are not logged in.")
-        return
+# --- FILE OPERATIONS ---
 
+def list_files(gateway_addr):
+    if not SESSION_TOKEN: return []
+    channel = grpc.insecure_channel(gateway_addr)
+    stub = rpc.GatewayStub(channel)
+    try:
+        resp = stub.ListFiles(pb.ListFilesRequest(token=SESSION_TOKEN))
+        return resp.files
+    except grpc.RpcError:
+        return []
+
+def put_file(gateway_addr, filepath, progress_callback=None):
+    if not SESSION_TOKEN: return False, "Not logged in"
     filename = os.path.basename(filepath)
     filesize = os.path.getsize(filepath)
-    
-    # 1. Ask Gateway for Metadata/Permission (Requesting 2 Replicas)
-    print(f"[*] Requesting upload metadata for {filename} (Replication=2)...")
     channel = grpc.insecure_channel(gateway_addr)
     gateway_stub = rpc.GatewayStub(channel)
 
     try:
-        meta_resp = gateway_stub.PutMeta(
-            pb.PutMetaRequest(
-                token=SESSION_TOKEN, 
-                filename=filename, 
-                filesize=filesize,
-                chunk_size=524288, # 512KB
-                replication=2  # REQUEST 2 NODES
-            )
-        )
+        meta_resp = gateway_stub.PutMeta(pb.PutMetaRequest(token=SESSION_TOKEN, filename=filename, filesize=filesize, chunk_size=524288, replication=2))
     except grpc.RpcError as e:
-        print(f"❌ Gateway Error: {e.details()}")
-        return
+        return False, f"Gateway Error: {e.details()}"
 
-    upload_id = meta_resp.upload_id
     nodes = meta_resp.nodes
+    if not nodes: return False, "No live nodes available"
 
-    if not nodes:
-        print("❌ Error: Gateway returned no storage nodes.")
-        return
-
-    print(f"[*] Gateway assigned {len(nodes)} storage nodes.")
-
-    # 2. Upload Data to EACH Assigned Node
     for i, target_node in enumerate(nodes):
         node_addr = f"{target_node.ip}:{target_node.port}"
-        print(f"\n🚀 [Replica {i+1}/{len(nodes)}] Uploading to Node: {node_addr}")
-
         node_channel = grpc.insecure_channel(node_addr)
         node_stub = rpc.NodeServiceStub(node_channel)
 
@@ -118,81 +99,42 @@ def put_file(gateway_addr, filepath):
             with open(filepath, "rb") as f:
                 chunk_id = 0
                 while True:
-                    data = f.read(524288) # Read 512KB
-                    if not data:
-                        break
+                    data = f.read(524288)
+                    if not data: break
                     checksum = hashlib.sha256(data).hexdigest()
-                    yield pb.ChunkUpload(
-                        upload_id=upload_id, 
-                        filename=filename, 
-                        chunk_id=chunk_id, 
-                        data=data, 
-                        checksum=checksum
-                    )
+                    yield pb.ChunkUpload(upload_id=meta_resp.upload_id, filename=filename, chunk_id=chunk_id, data=data, checksum=checksum)
+                    if progress_callback: progress_callback(chunk_id, filename, node_addr)
                     chunk_id += 1
-                    print(f"   -> Sending chunk {chunk_id}...", end='\r')
 
         try:
-            transfer_resp = node_stub.PutChunks(chunk_generator())
-            print(f"\n   ✅ Success: {transfer_resp.message}")
+            node_stub.PutChunks(chunk_generator())
+        except grpc.RpcError:
+            pass 
             
-        except grpc.RpcError as e:
-            print(f"\n   ❌ Node Transfer Error: {e.details()}")
-    
-    print("\n✅ All replications processed.")
-
-# --- DOWNLOAD (Restored!) ---
+    return True, "Upload complete"
 
 def download_file(gateway_addr, filename, output_path):
-    global SESSION_TOKEN
-    
-    if not SESSION_TOKEN:
-        print("⛔ Error: You are not logged in.")
-        return False
-
-    # 1. Ask Gateway for Location
-    print(f"[*] Requesting download metadata for {filename}...")
+    if not SESSION_TOKEN: return False, "Not logged in"
     channel = grpc.insecure_channel(gateway_addr)
     gateway_stub = rpc.GatewayStub(channel)
 
     try:
         resp = gateway_stub.GetMeta(pb.GetMetaRequest(token=SESSION_TOKEN, filename=filename))
     except grpc.RpcError as e:
-        print(f"❌ Gateway Error: {e.details()}")
-        return False
+        return False, f"Gateway Error: {e.details()}"
 
-    file_info = resp.file
-    if not file_info.nodes:
-        print("❌ Error: No nodes found for this file.")
-        return False
+    if not resp.file.nodes: return False, "No nodes found"
 
-    # 2. Download from Node (Just pick the first one)
-    target_node = file_info.nodes[0]
+    target_node = resp.file.nodes[0]
     node_addr = f"{target_node.ip}:{target_node.port}"
-    print(f"[*] Downloading from Node: {node_addr}")
-
     node_channel = grpc.insecure_channel(node_addr)
     node_stub = rpc.NodeServiceStub(node_channel)
 
     try:
-        chunk_stream = node_stub.GetChunks(
-            pb.GetChunksRequest(
-                upload_id=file_info.upload_id,
-                start_chunk=0,
-                end_chunk=file_info.total_chunks
-            )
-        )
-        
+        chunk_stream = node_stub.GetChunks(pb.GetChunksRequest(upload_id=resp.file.upload_id, start_chunk=0, end_chunk=resp.file.total_chunks))
         with open(output_path, "wb") as f:
-            chunks_received = 0
             for chunk in chunk_stream:
                 f.write(chunk.data)
-                chunks_received += 1
-                print(f"   <- Received chunk {chunk.chunk_id}...", end='\r')
-        
-        print(f"\n✅ Download Complete: {output_path} ({chunks_received} chunks)")
-        return True
-
+        return True, "Download successful"
     except grpc.RpcError as e:
-        print(f"\n❌ Node Download Error: {e.details()}")
-        return False
+        return False, f"Node Error: {e.details()}"
