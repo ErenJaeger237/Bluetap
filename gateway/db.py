@@ -114,7 +114,7 @@ class MetadataDB:
     def get_file_by_filename(self, filename):
         cur = self.conn.cursor()
         cur.execute("SELECT upload_id, filename, filesize, chunk_size, total_chunks, nodes_csv, created FROM files WHERE filename=?", (filename,))
-        return cursor.fetchone()
+        return cur.fetchone()
 
     def get_user_files(self, username):
         cur = self.conn.cursor()

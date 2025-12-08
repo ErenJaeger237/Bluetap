@@ -2,6 +2,7 @@ import grpc
 import hashlib
 import os
 import sys
+import traceback
 
 if __package__ is None:
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -21,22 +22,12 @@ def get_token():
 # --- AUTHENTICATION ---
 
 def login(gateway_addr, username, email_or_phone=""):
-    """Request OTP, optionally sending it to email/phone."""
     channel = grpc.insecure_channel(gateway_addr)
     stub = rpc.GatewayStub(channel)
-    print(f"[*] Requesting OTP for {username} (Contact: {email_or_phone or 'None'})...")
+    print(f"[*] Requesting OTP for {username}...")
     try:
-        # Pass the email to the RequestOTP RPC
-        response = stub.RequestOTP(pb.RequestOTPRequest(
-            username=username, 
-            email_or_phone=email_or_phone
-        ))
-        
-        if response.ok:
-            return True, response.message
-        else:
-            return False, response.message
-            
+        response = stub.RequestOTP(pb.RequestOTPRequest(username=username, email_or_phone=email_or_phone))
+        return response.ok, response.message
     except grpc.RpcError as e:
         return False, str(e.details())
 
@@ -54,7 +45,6 @@ def verify_otp_and_get_token(gateway_addr, username, otp_code):
         return False, str(e.details())
 
 def verify_otp(gateway_addr, username):
-    """Interactive CLI version of verify."""
     otp_code = input("📩 Enter the 6-digit OTP: ")
     ok, token = verify_otp_and_get_token(gateway_addr, username, otp_code)
     if ok:
@@ -77,8 +67,10 @@ def list_files(gateway_addr):
 
 def put_file(gateway_addr, filepath, progress_callback=None):
     if not SESSION_TOKEN: return False, "Not logged in"
+    
     filename = os.path.basename(filepath)
     filesize = os.path.getsize(filepath)
+    
     channel = grpc.insecure_channel(gateway_addr)
     gateway_stub = rpc.GatewayStub(channel)
 
@@ -89,6 +81,9 @@ def put_file(gateway_addr, filepath, progress_callback=None):
 
     nodes = meta_resp.nodes
     if not nodes: return False, "No live nodes available"
+
+    success_count = 0
+    errors = []
 
     for i, target_node in enumerate(nodes):
         node_addr = f"{target_node.ip}:{target_node.port}"
@@ -103,18 +98,32 @@ def put_file(gateway_addr, filepath, progress_callback=None):
                     if not data: break
                     checksum = hashlib.sha256(data).hexdigest()
                     yield pb.ChunkUpload(upload_id=meta_resp.upload_id, filename=filename, chunk_id=chunk_id, data=data, checksum=checksum)
-                    if progress_callback: progress_callback(chunk_id, filename, node_addr)
+                    if progress_callback: 
+                        try: progress_callback(chunk_id, filename, node_addr)
+                        except: pass
                     chunk_id += 1
 
         try:
-            node_stub.PutChunks(chunk_generator())
-        except grpc.RpcError:
-            pass 
-            
-    return True, "Upload complete"
+            transfer_resp = node_stub.PutChunks(chunk_generator())
+            if transfer_resp.success:
+                success_count += 1
+            else:
+                errors.append(f"{node_addr}: {transfer_resp.message}")
+                
+        except grpc.RpcError as e:
+            errors.append(f"{node_addr}: {e.details()}")
+        except Exception as e:
+            errors.append(f"{node_addr}: {e}")
+
+    if success_count > 0:
+        return True, f"Upload complete ({success_count}/{len(nodes)} nodes)"
+    else:
+        return False, f"All uploads failed. Errors: {'; '.join(errors)}"
 
 def download_file(gateway_addr, filename, output_path):
     if not SESSION_TOKEN: return False, "Not logged in"
+    
+    # 1. Get Metadata
     channel = grpc.insecure_channel(gateway_addr)
     gateway_stub = rpc.GatewayStub(channel)
 
@@ -123,18 +132,36 @@ def download_file(gateway_addr, filename, output_path):
     except grpc.RpcError as e:
         return False, f"Gateway Error: {e.details()}"
 
-    if not resp.file.nodes: return False, "No nodes found"
+    if not resp.file.nodes:
+        return False, "File record exists, but no active Storage Nodes match the ID."
 
-    target_node = resp.file.nodes[0]
-    node_addr = f"{target_node.ip}:{target_node.port}"
-    node_channel = grpc.insecure_channel(node_addr)
-    node_stub = rpc.NodeServiceStub(node_channel)
+    # 2. Try ALL Nodes (Failover)
+    errors = []
+    for target_node in resp.file.nodes:
+        node_addr = f"{target_node.ip}:{target_node.port}"
+        print(f"[*] Trying download from {node_addr}...")
 
-    try:
-        chunk_stream = node_stub.GetChunks(pb.GetChunksRequest(upload_id=resp.file.upload_id, start_chunk=0, end_chunk=resp.file.total_chunks))
-        with open(output_path, "wb") as f:
-            for chunk in chunk_stream:
-                f.write(chunk.data)
-        return True, "Download successful"
-    except grpc.RpcError as e:
-        return False, f"Node Error: {e.details()}"
+        try:
+            node_channel = grpc.insecure_channel(node_addr)
+            node_stub = rpc.NodeServiceStub(node_channel)
+            
+            chunk_stream = node_stub.GetChunks(pb.GetChunksRequest(
+                upload_id=resp.file.upload_id, 
+                start_chunk=0, 
+                end_chunk=resp.file.total_chunks
+            ))
+            
+            with open(output_path, "wb") as f:
+                for chunk in chunk_stream:
+                    f.write(chunk.data)
+            
+            return True, "Download successful"
+
+        except grpc.RpcError as e:
+            errors.append(f"{node_addr}: {e.details()}")
+            continue # Try next node
+        except Exception as e:
+            errors.append(f"{node_addr}: {str(e)}")
+            continue
+
+    return False, f"Failed to retrieve from any node. Errors: {'; '.join(errors)}"

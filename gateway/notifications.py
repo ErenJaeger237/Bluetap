@@ -3,19 +3,19 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 # ==========================================
-# 🔧 CONFIGURATION (YOU MUST CHANGE THIS)
+# 🔧 CONFIGURATION (EDIT THIS PART)
 # ==========================================
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-SENDER_EMAIL = "your_email@gmail.com"        # <--- PUT YOUR GMAIL HERE
-SENDER_PASSWORD = "xxxx xxxx xxxx xxxx"      # <--- PUT YOUR APP PASSWORD HERE
+
+# REPLACE THESE TWO LINES WITH YOUR REAL INFO
+SENDER_EMAIL = "jordanebua2@gmail.com"        # <--- Your REAL email
+SENDER_PASSWORD = "yjax pged yclo hrfh"      # <--- Your 16-char APP PASSWORD
+
 # ==========================================
 
 def send_real_email(to_email, otp_code):
-    if "your_email" in SENDER_EMAIL:
-        print("⚠️ [CONFIG ERROR] You must edit gateway/notifications.py with your real email credentials!")
-        return False
-
+    # We removed the safety check so it tries to send now
     subject = "Bluetap Login Code"
     body = f"""
     Welcome to Bluetap Cloud!
@@ -43,6 +43,7 @@ def send_real_email(to_email, otp_code):
         return True
     except Exception as e:
         print(f"❌ EMAIL FAILED: {e}")
+        print("   (Did you use an App Password? Regular passwords often fail.)")
         return False
 
 def send_notification(contact, otp):
@@ -50,6 +51,5 @@ def send_notification(contact, otp):
     if "@" in contact:
         return send_real_email(contact, otp)
     else:
-        # Placeholder for SMS (Twilio would go here)
         print(f"📱 [SMS SIMULATION] Sending OTP {otp} to {contact}")
         return True

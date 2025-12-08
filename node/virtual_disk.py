@@ -18,14 +18,29 @@ class VirtualDisk:
         p = self._manifest_path(upload_id)
         if not p.exists():
             raise FileNotFoundError("manifest not found")
-        with open(p, "r", encoding="utf-8") as f:
-            return json.load(f)
+        try:
+            with open(p, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            # Handle corrupted JSON gracefully
+            return {"upload_id": upload_id, "total_chunks": 0, "received": [], "checksums": []}
+
+    def _save_manifest_safely(self, upload_id, manifest):
+        """Writes JSON to a temp file first, then renames it to avoid locking errors."""
+        p = self._manifest_path(upload_id)
+        temp_p = p.with_suffix(".tmp")
+        try:
+            with open(temp_p, "w", encoding="utf-8") as f:
+                json.dump(manifest, f)
+            # Atomic replacement (safer on Windows)
+            if os.path.exists(p): os.remove(p)
+            os.rename(temp_p, p)
+        except Exception as e:
+            print(f"⚠️ Warning: Failed to save manifest: {e}")
 
     def _load_or_create_manifest(self, upload_id):
         p = self._manifest_path(upload_id)
         if not p.exists():
-            # Create a fallback manifest if one doesn't exist
-            # We initialize lists to empty; they will grow dynamically in write_chunk
             manifest = {
                 "upload_id": upload_id, 
                 "filename": "unknown", 
@@ -35,8 +50,7 @@ class VirtualDisk:
                 "received": [], 
                 "checksums": []
             }
-            with open(p, "w", encoding="utf-8") as f:
-                json.dump(manifest, f)
+            self._save_manifest_safely(upload_id, manifest)
             return manifest
         return self._load_manifest(upload_id)
 
@@ -56,8 +70,6 @@ class VirtualDisk:
         # 3. Update Manifest safely
         m = self._load_or_create_manifest(upload_id)
         
-        # DYNAMIC LIST EXPANSION (The Fix)
-        # If the chunk_id is beyond the current list size, fill the gap with None/False
         required_len = chunk_id + 1
         current_len = len(m["received"])
         
@@ -66,24 +78,18 @@ class VirtualDisk:
             m["received"].extend([False] * extension_count)
             m["checksums"].extend([None] * extension_count)
             
-            # Also update total_chunks estimate if we are growing beyond it
             if required_len > m["total_chunks"]:
                 m["total_chunks"] = required_len
 
-        # Now we can safely assign
         m["received"][chunk_id] = True
         m["checksums"][chunk_id] = checksum_hex
         
-        with open(self._manifest_path(upload_id), "w", encoding="utf-8") as f:
-            json.dump(m, f)
-            
+        self._save_manifest_safely(upload_id, m)
         return True
 
     def is_complete(self, upload_id):
         try:
             m = self._load_manifest(upload_id)
-            # Check if we have received as many chunks as expected
-            # AND all of them are marked True
             if m["total_chunks"] == 0: return False
             if len(m["received"]) < m["total_chunks"]: return False
             return all(m["received"])

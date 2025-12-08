@@ -2,6 +2,7 @@ import os
 import time
 import argparse
 import threading
+import traceback
 from concurrent import futures
 import grpc
 import sys
@@ -15,40 +16,20 @@ from generated import bluetap_pb2_grpc as rpc
 from node.virtual_disk import VirtualDisk 
 
 # --- HEARTBEAT THREAD ---
-# --- HEARTBEAT THREAD (CORRECTED) ---
 def heartbeat_loop(gateway_addr, node_id, port):
-    """Background thread that sends a pulse every 5 seconds."""
     print(f"💓 Heartbeat service started for {node_id}")
-    
-    # Wait a moment for server to start
     time.sleep(2)
     
     while True:
         try:
             channel = grpc.insecure_channel(gateway_addr)
             stub = rpc.GatewayStub(channel)
-            
-            # Create a NodeInfo object
-            node_info = pb.NodeInfo(
-                node_id=node_id, 
-                ip="127.0.0.1", 
-                port=port, 
-                capacity_bytes=10*1024**3,
-                metadata="alive"
-            )
-            
-            # USE RegisterNode AS HEARTBEAT
-            # This is safe because it updates 'last_seen' in the DB
+            node_info = pb.NodeInfo(node_id=node_id, ip="127.0.0.1", port=port, capacity_bytes=10*1024**3, metadata="alive")
             stub.RegisterNode(pb.RegisterNodeRequest(node=node_info))
-            
-            # Optional: Print a dot so you know it's working
-            # print(".", end="", flush=True)
+        except Exception:
+            pass # Silent fail if gateway is down
+        time.sleep(5)
 
-        except Exception as e:
-            # Don't crash if gateway is down
-            print(f"💔 Heartbeat failed: {e}")
-        
-        time.sleep(5) # Pulse every 5 seconds
 # --- NODE SERVICER ---
 class NodeServicer(rpc.NodeServiceServicer):
     def __init__(self, storage_root):
@@ -57,35 +38,39 @@ class NodeServicer(rpc.NodeServiceServicer):
     def PutChunks(self, request_iterator, context):
         total_written = 0
         try:
+            # We wrap the iteration in a try-block to catch Client Disconnects
             for chunk in request_iterator:
-                # Basic validation
                 if not chunk.data: continue
                 
                 # Write to disk
                 ok = self.disk.write_chunk(chunk.upload_id, chunk.chunk_id, chunk.data, chunk.checksum)
                 if not ok:
-                    print(f"❌ Checksum mismatch for chunk {chunk.chunk_id}")
-                    return pb.UploadResult(success=False, message=f"checksum mismatch for chunk {chunk.chunk_id}", received_chunks=total_written)
+                    msg = f"checksum mismatch for chunk {chunk.chunk_id}"
+                    print(f"❌ {msg}")
+                    return pb.UploadResult(success=False, message=msg, received_chunks=total_written)
                 
                 total_written += 1
                 
             return pb.UploadResult(success=True, message=f"all chunks received ({total_written})", received_chunks=total_written)
+            
+        except grpc.RpcError:
+            # This happens when the Client cancels or disconnects
+            print(f"⚠️ Upload interrupted: Client disconnected.")
+            return pb.UploadResult(success=False, message="Client disconnected", received_chunks=total_written)
+            
         except Exception as e:
-            print(f"❌ Upload Error: {e}")
+            print(f"\n❌ Upload Error on Node:")
+            traceback.print_exc()
             return pb.UploadResult(success=False, message=str(e), received_chunks=total_written)
 
     def GetChunks(self, request, context):
-        # Determine how many chunks to read
-        # If end_chunk is 0 or -1, we need to look up total chunks from disk
         end = request.end_chunk
         if end <= 0:
             end = self.disk.get_chunk_count(request.upload_id)
 
         for cid in range(request.start_chunk, end):
             data = self.disk.read_chunk(request.upload_id, cid)
-            if data is None:
-                continue
-            # Calculate checksum for verification
+            if data is None: continue
             checksum = __import__("hashlib").sha256(data).hexdigest()
             yield pb.Chunk(chunk_id=cid, data=data, checksum=checksum)
 
@@ -109,30 +94,20 @@ def serve(node_id, storage_root, host, port, gateway_addr):
     servicer = NodeServicer(storage_root)
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
     rpc.add_NodeServiceServicer_to_server(servicer, server)
-    bind_addr = f"{host}:{port}"
-    server.add_insecure_port(bind_addr)
+    server.add_insecure_port(f"{host}:{port}")
     server.start()
-    print(f"Node {node_id} running on {bind_addr}, storage={storage_root}")
+    print(f"Node {node_id} running on {host}:{port}, storage={storage_root}")
     
-    # 1. Attempt Registration
     try:
         register_with_gateway(gateway_addr, node_id, host, port, capacity=10 * 1024**3)
     except Exception as e:
         print("Node registration note:", e)
 
-    # 2. START HEARTBEAT THREAD
-    hb_thread = threading.Thread(
-        target=heartbeat_loop, 
-        args=(gateway_addr, node_id, port),
-        daemon=True
-    )
-    hb_thread.start()
+    threading.Thread(target=heartbeat_loop, args=(gateway_addr, node_id, port), daemon=True).start()
 
     try:
-        while True:
-            time.sleep(60)
+        while True: time.sleep(60)
     except KeyboardInterrupt:
-        print("node shutting down")
         server.stop(0)
 
 if __name__ == "__main__":
@@ -143,6 +118,5 @@ if __name__ == "__main__":
     parser.add_argument("--storage", default="./node_storage")
     parser.add_argument("--gateway", default="127.0.0.1:50051")
     args = parser.parse_args()
-    
     os.makedirs(args.storage, exist_ok=True)
     serve(args.node_id, args.storage, args.host, args.port, args.gateway)
