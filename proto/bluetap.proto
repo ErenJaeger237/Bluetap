@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package bluetap.v1;
+
+option go_package = "github.com/yourorg/bluetap/proto;bluetap";
+option java_package = "com.yourorg.bluetap.proto";
+option java_multiple_files = true;
+
+message Empty {}
+message NodeInfo {
+  string node_id = 1;
+  string ip = 2;
+  int32 port = 3;
+  int64 capacity_bytes = 4;
+  string metadata = 5;
+}
+message FileLocation {
+  string upload_id = 1;
+  repeated NodeInfo nodes = 2;
+  int64 filesize = 3;
+  int32 chunk_size = 4;
+  int32 total_chunks = 5;
+  string filename = 6;
+  string owner = 7;
+}
+
+
+
+message LoginRequest { string username = 1; string password = 2; }
+message LoginResponse { string next_action = 1; string message = 2; }
+message RequestOTPRequest { string username = 1; string email_or_phone = 2; }
+message RequestOTPResponse { bool ok = 1; string message = 2; }
+message VerifyOTPRequest { string username = 1; string otp_code = 2; }
+message VerifyOTPResponse { bool ok = 1; string token = 2; string message = 3; }
+message ValidateTokenRequest { string token = 1; }
+message ValidateTokenResponse { bool valid = 1; string username = 2; }
+
+service Gateway {
+    // File Management RPCs
+    rpc PutMeta (PutMetaRequest) returns (PutMetaResponse);
+    rpc GetMeta (GetMetaRequest) returns (GetMetaResponse);
+    rpc ListFiles (ListFilesRequest) returns (ListFilesResponse);
+    rpc RegisterNode (RegisterNodeRequest) returns (RegisterNodeResponse);
+    
+    // Authentication RPCs (Moved from AuthService)
+    rpc Login (LoginRequest) returns (LoginResponse);
+    rpc RequestOTP (RequestOTPRequest) returns (RequestOTPResponse);
+    rpc VerifyOTP (VerifyOTPRequest) returns (VerifyOTPResponse);
+    rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+}
+
+message PutMetaRequest {
+  string token = 1;
+  string filename = 2;
+  int64 filesize = 3;
+  int32 chunk_size = 4;
+  int32 replication = 5;
+  string client_metadata = 6;
+}
+message PutMetaResponse { string upload_id = 1; repeated NodeInfo nodes = 2; int32 total_chunks = 3; int32 chunk_size = 4; string message = 5; }
+message GetMetaRequest { string token = 1; string filename = 2; }
+message GetMetaResponse { FileLocation file = 1; }
+message ListFilesRequest { string token = 1; int32 limit = 2; int32 offset = 3; }
+message FileSummary { string filename = 1; string upload_id = 2; int64 filesize = 3; string created_at = 4; }
+message ListFilesResponse { repeated FileSummary files = 1; int32 total = 2; }
+message RegisterNodeRequest { NodeInfo node = 1; }
+message RegisterNodeResponse { bool ok = 1; string message = 2; }
+
+service NodeService {
+  rpc PutChunks (stream ChunkUpload) returns (UploadResult);
+  rpc GetChunks (GetChunksRequest) returns (stream Chunk);
+  rpc Heartbeat (HeartbeatRequest) returns (HeartbeatResponse);
+  rpc RepairTasks (RepairRequest) returns (RepairResponse);
+}
+
+message ChunkUpload {
+  string upload_id = 1;
+  string filename = 2;
+  int32 chunk_id = 3;
+  bytes data = 4;
+  string checksum = 5;
+  bool last_chunk = 6;
+  string client_side_meta = 7;
+}
+message UploadResult { bool success = 1; string message = 2; int32 received_chunks = 3; }
+message GetChunksRequest { string upload_id = 1; int32 start_chunk = 2; int32 end_chunk = 3; }
+message Chunk { int32 chunk_id = 1; bytes data = 2; string checksum = 3; }
+
+message HeartbeatRequest { NodeInfo node = 1; int64 used_bytes = 2; int64 free_bytes = 3; int64 timestamp = 4; }
+message HeartbeatResponse { bool ok = 1; string message = 2; }
+message RepairRequest { string upload_id = 1; }
+message RepairResponse { bool ok = 1; string message = 2; repeated int32 missing_chunks = 3; }
+
+service Coordinator {
+  rpc SelectNodes (SelectNodesRequest) returns (SelectNodesResponse);
+  rpc ScheduleRepair (ScheduleRepairRequest) returns (ScheduleRepairResponse);
+  rpc LookupFile (LookupFileRequest) returns (LookupFileResponse);
+}
+message SelectNodesRequest { int64 filesize = 1; int32 replication = 2; }
+message SelectNodesResponse { repeated NodeInfo nodes = 1; }
+message ScheduleRepairRequest { string upload_id = 1; repeated int32 chunk_ids = 2; }
+message ScheduleRepairResponse { bool ok = 1; string message = 2; }
+message LookupFileRequest { string filename = 1; }
+message LookupFileResponse { FileLocation file = 1; }
+
+service UploadState {
+  rpc CreateUploadRecord (CreateUploadRecordRequest) returns (CreateUploadRecordResponse);
+  rpc GetMissingChunks (GetMissingChunksRequest) returns (GetMissingChunksResponse);
+  rpc FinalizeUpload (FinalizeUploadRequest) returns (FinalizeUploadResponse);
+}
+message CreateUploadRecordRequest { string upload_id = 1; string filename = 2; int32 total_chunks = 3; }
+message CreateUploadRecordResponse { bool ok = 1; }
+message GetMissingChunksRequest { string upload_id = 1; }
+message GetMissingChunksResponse { repeated int32 missing_chunks = 1; }
+message FinalizeUploadRequest { string upload_id = 1; }
+message FinalizeUploadResponse { bool ok = 1; string message = 2; }
