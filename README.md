@@ -1,289 +1,162 @@
-Bluetap is a community-driven digital platform designed to address these challenges by improving the management, reporting, and monitoring of shared water resources. The platform enables residents to locate nearby water points, report leaks or breakdowns, and receive real-time updates on water availability. By connecting residents, local water committees, and technicians through a collaborative digital environment, Bluetap promotes accountability, transparency, and efficiency in community water management.
+# Bluetap Distributed Cloud Storage System
 
-The project leverages modern web and mobile technologies—using Flutter for the frontend, Node.js/Firebase for backend services, and MongoDB/Firebase Firestore for the database layer. The system is designed to be scalable, fault-tolerant, and easily deployable in diverse community settings. This document provides a detailed overview of the system’s conception, design, architecture, and implementation approach, as well as its anticipated impact on water management practices in Cameroon.
+Bluetap is a scalable, fault-tolerant distributed object storage system designed for community infrastructure management. It implements a Master-Worker architecture similar to Google File System (GFS) or HDFS, featuring secure authentication, data replication, and liveness detection.
 
-1. Problem Statement
+## Key Features
 
-In many Cameroonian communities, particularly in peri-urban and rural areas, access to water is often facilitated through communal sources such as public taps, boreholes, and water tanks. Unfortunately, the management of these shared resources is plagued by numerous issues.
+- **Distributed Architecture**: Separates metadata (Gateway) from physical storage (Nodes) for high scalability.
+- **Fault Tolerance**: Implements RAID-1 style replication. Files are automatically mirrored across multiple active storage nodes.
+- **Liveness Detection**: The Gateway monitors nodes via Heartbeats. If a node fails, traffic is automatically rerouted to healthy replicas.
+- **Security**:
+  - 2FA/OTP Authentication: Secure login via email-based One-Time Passwords.
+  - Persistent Sessions: Token-based authentication using a local SQLite metadata store.
+  - Multi-Tenancy: Complete isolation of user data.
+- **High Performance**: Clients stream data directly to storage nodes via gRPC, preventing the Gateway from becoming a bottleneck.
+- **Dual Interfaces**:
+  - User Dashboard: A modern web interface for uploading/retrieving files.
+  - Admin Control Plane: A supervisor dashboard to monitor node health and system telemetry in real-time.
 
-Common problems include:
+## Prerequisites
 
-Unreported leaks and damages leading to water wastage.
+Ensure you have Python 3.8+ installed.
 
-Frequent tap closures due to delayed maintenance or mismanagement.
+### 1. Install Dependencies
 
-Lack of communication between residents, water committees, and technicians.
+Run the following command to install the required libraries:
 
-Absence of a central reporting system, making problem tracking inefficient.
+```bash
+pip install grpcio grpcio-tools streamlit pandas
+```
 
-Conflicts arising among residents over responsibility and usage rights.
+### 2. Generate Protocol Buffers
 
-Without a coordinated platform to manage and monitor these community resources, the sustainability of water points is severely compromised. Bluetap seeks to bridge this communication gap through a centralized digital system that empowers communities to take an active role in managing their shared water infrastructure.
+Before running the system for the first time (or after changing `.proto` files), compile the gRPC definitions:
 
-2. Objectives
-General Objective
+**Windows (PowerShell):**
 
-To design and implement a community-based digital water management system that enables effective monitoring, reporting, and maintenance of shared water points within Cameroonian communities.
+```powershell
+python -m grpc_tools.protoc -I=proto --python_out=generated --grpc_python_out=generated proto/bluetap.proto
+```
 
-Specific Objectives
+**Linux/Mac:**
 
-Develop a cross-platform application for community users and water committees.
+```bash
+./generate_proto.sh
+```
 
-Enable users to locate nearby water points and check their operational status.
+## How to Run the System
 
-Facilitate real-time reporting of faults, leaks, or shortages.
+To see the full distributed system in action, you need to run multiple components in separate terminal windows.
 
-Provide an administrative dashboard for water committees to track reports and coordinate maintenance.
+### Step 1: Start the Gateway (The Metadata Server)
 
-Promote community collaboration and transparency in water management.
+Open Terminal 1 and run:
 
-Ensure scalability and reliability of the system for future expansion.
+```bash
+python -m gateway.gateway
+```
 
-3. Project Scope
+**Status**: Should print "Gateway running on [::]:50051".
 
-The Bluetap system focuses primarily on community-level water management within Cameroon. It targets neighborhoods or villages with shared taps or boreholes. The platform does not require IoT sensors or physical automation during its initial phase; rather, it relies on user input, community reporting, and digital coordination.
+### Step 2: Start Storage Nodes (The Storage Servers)
 
-The scope includes:
+Open Terminal 2 (Node A):
 
-Design and development of a mobile/web application.
+```bash
+python -m node.node_server --node-id nodeA --port 50061 --storage ./nodeA_storage --gateway 127.0.0.1:50051
+```
 
-Database design for storing user reports, tap data, and maintenance records.
+Open Terminal 3 (Node B):
 
-Integration with map APIs for location-based services.
+```bash
+python -m node.node_server --node-id nodeB --port 50062 --storage ./nodeB_storage --gateway 127.0.0.1:50051
+```
 
-Implementation of a notification system for status updates.
+**Status**: Nodes should print "Register response: True" and start their Heartbeat service.
 
-A web-based admin dashboard for oversight and analytics.
+### Step 3: Launch the User Dashboard
 
-The project does not initially include IoT-based automation, billing systems, or water quality detection, though these may be added in future versions.
+Open Terminal 4 and run:
 
-4. System Overview
+```bash
+streamlit run dashboard.py
+```
 
-Bluetap is conceptualized as a three-tier distributed system:
+This will open the web interface in your browser (usually http://localhost:8501).
 
-Frontend Layer (User Interface): A Flutter-based cross-platform app that runs on mobile and web. It allows users to view, report, and receive updates about water points.
+**Login/Register**: Enter any username (e.g., alice) and email. Check the Gateway terminal (Terminal 1) for the OTP Code if email is not configured.
 
-Backend Layer (Business Logic): A Node.js or Firebase Function-based backend that processes data, handles user authentication, and manages requests between users and the database.
+### Step 4: Launch the Admin Control Plane (Optional)
 
-Database Layer: A cloud database (Firebase Firestore or MongoDB Atlas) storing persistent data such as user profiles, reports, water point details, and maintenance logs.
+Open Terminal 5 and run:
 
-Data flows smoothly between the layers, ensuring scalability, concurrency, and data reliability.
+```bash
+streamlit run admin.py
+```
 
-5. Key Features
+**Admin Credentials**:
 
-Water Point Locator: Users can view the location and status of community water points on a map.
+- User: admin
+- Password: admin123
 
-Real-Time Reporting: Users report leaks, tap closures, or shortages directly via the app.
+Use this dashboard to monitor node health (Online/Offline status) and view system logs.
 
-Community Dashboard: Displays aggregated data, allowing community leaders to monitor performance.
+## Testing Fault Tolerance
 
-Notifications: Push notifications alert users of changes such as water restoration or scheduled repairs.
+1. Upload a file using the User Dashboard.
+2. Check the Admin Dashboard to see the file recorded.
+3. Kill Node A (Press Ctrl+C in Terminal 2).
+4. Refresh the Admin Dashboard: Node A should turn OFFLINE.
+5. Go back to the User Dashboard and click Retrieve.
+6. The system will automatically failover and download the file from Node B.
 
-Admin Panel: Enables administrators to track and manage reports, assign technicians, and update tap statuses.
+## Project Structure
 
-Offline Data Caching: Allows basic functionality even with limited internet access.
+- `gateway/`: Contains the Metadata Server logic, Database (`db.py`), and Notification system.
+- `node/`: Contains the Storage Server logic (`node_server.py`) and disk management (`virtual_disk.py`).
+- `client/`: Contains the client-side library (`client_cli.py`) used by the dashboards.
+- `proto/`: Protocol Buffer definitions (`bluetap.proto`).
+- `generated/`: Compiled gRPC Python files.
+- `dashboard.py`: Streamlit frontend for end-users.
+- `admin.py`: Streamlit frontend for system administrators.
 
-Analytics and Reports: Generates statistics on reported issues and maintenance efficiency.
+## Architecture Overview
 
-6. System Architecture
+Bluetap follows a Master-Worker architecture:
 
-The Bluetap system is based on a distributed cloud architecture designed for scalability and fault tolerance.
+- **Gateway (Master)**: Manages metadata, user authentication, and coordinates file operations.
+- **Nodes (Workers)**: Handle physical storage, replication, and data retrieval.
+- **Clients**: Interact with the Gateway for metadata and directly with Nodes for data transfer.
 
-6.1 Architectural Layers
+## Contributing
 
-Presentation Layer: Flutter frontend application (mobile/web).
+Contributions are welcome! Please follow these steps:
 
-Application Layer: Backend services implemented with Node.js/Express or Firebase Functions.
+1. Fork the repository.
+2. Create a feature branch.
+3. Make your changes and test thoroughly.
+4. Submit a pull request.
 
-Data Layer: Cloud-based database (Firestore/MongoDB) for persistence.
+## License
 
-API Layer: RESTful or GraphQL APIs handling requests and responses between the client and backend.
+This project is licensed under the MIT License. See the LICENSE file for details.
+## Architecture Overview
 
-6.2 Scalability Design
+Bluetap follows a Master-Worker architecture:
 
-The system uses horizontal scaling by deploying backend services in cloud environments that support auto-scaling, such as Railway or Firebase Hosting. The database uses partitioning and sharding to ensure smooth performance as data volume increases.
+- **Gateway (Master)**: Manages metadata, user authentication, and coordinates file operations.
+- **Nodes (Workers)**: Handle physical storage, replication, and data retrieval.
+- **Clients**: Interact with the Gateway for metadata and directly with Nodes for data transfer.
 
-6.3 Fault Tolerance
+## Contributing
 
-Bluetap ensures reliability through:
+Contributions are welcome! Please follow these steps:
 
-Cloud-based automatic backups.
+1. Fork the repository.
+2. Create a feature branch.
+3. Make your changes and test thoroughly.
+4. Submit a pull request.
 
-Stateless backend services to reduce dependency failures.
+## License
 
-Retry mechanisms for failed network requests.
-
-Caching for frequently accessed data.
-
-7. Technologies Used
-Component	Technology/Tool	Purpose
-Frontend	Flutter / FlutterFlow	Cross-platform app development
-Backend	Node.js (Express) / Firebase Functions	API and logic management
-Database	Firebase Firestore / MongoDB Atlas	Cloud-based storage
-Hosting	Railway / Render / Firebase Hosting	Deployment environment
-API Integration	Google Maps API	Location and mapping
-Authentication	Firebase Auth / JWT	User authentication
-Notifications	Firebase Cloud Messaging (FCM)	Real-time alerts
-Version Control	Git & GitHub	Code management and collaboration
-8. System Design and Components
-8.1 User Interface Design
-
-The user interface is designed with simplicity and accessibility in mind. It features:
-
-A map view showing active/inactive water points.
-
-A reporting form for users to describe problems.
-
-A notification tab for updates.
-
-A dashboard view for community leaders.
-
-8.2 Backend Design
-
-The backend handles:
-
-CRUD operations for user and tap data.
-
-Authentication and session management.
-
-Real-time synchronization between users and administrators.
-
-RESTful API endpoints for external integrations.
-
-8.3 Database Schema
-
-Main collections/tables:
-
-Users: { user_id, name, role, community, contact }
-
-WaterPoints: { point_id, location, status, description }
-
-Reports: { report_id, user_id, point_id, issue_type, status, timestamp }
-
-Notifications: { notification_id, message, user_group, time_sent }
-
-9. Data Flow and Use Case Diagrams
-9.1 Data Flow Description
-
-The user logs in and fetches the list of water points.
-
-When a problem occurs, the user submits a report.
-
-The backend stores the report and notifies the admin.
-
-The admin reviews and updates the tap status.
-
-A notification is sent to all users within that community.
-
-9.2 Use Case Examples
-
-Actors:
-
-Community User
-
-Admin (Water Committee)
-
-Technician
-
-Use Cases:
-
-Report water issue
-
-Update tap status
-
-Send notifications
-
-View water status map
-
-Generate maintenance reports
-
-10. Implementation Plan
-Phase	Activities	Expected Duration
-Phase 1	Requirement analysis, UI/UX design	1 week
-Phase 2	Backend setup and database schema	1 week
-Phase 3	Frontend integration and API linking	2 weeks
-Phase 4	Testing and debugging	1 week
-Phase 5	Deployment and presentation preparation	1 week
-11. Scalability and Fault Tolerance
-
-Bluetap’s cloud-native design ensures that the system can easily expand to serve multiple communities simultaneously.
-
-Scalability: Each community’s data is stored separately using unique identifiers to prevent overlap.
-
-Fault Tolerance: Cloud functions and replicated databases ensure uptime even during partial outages.
-
-Load Balancing: Requests are distributed evenly across backend instances to maintain performance.
-
-12. Collaboration and User Interaction
-
-Bluetap promotes collaboration by enabling multiple actors—users, administrators, and technicians—to interact on a single platform.
-
-Residents: Report issues and monitor water point status.
-
-Administrators: Manage data, verify reports, and coordinate maintenance.
-
-Technicians: Access assigned repair tasks and update progress.
-This structure ensures accountability and continuous feedback between all participants.
-
-13. Testing and Evaluation
-13.1 Testing Types
-
-Unit Testing: Verifying core functions like reporting, notifications, and status updates.
-
-Integration Testing: Ensuring smooth communication between frontend, backend, and database.
-
-User Acceptance Testing (UAT): Testing with a small community group to assess usability.
-
-Load Testing: Simulating multiple users to test scalability.
-
-13.2 Evaluation Metrics
-
-Report handling time
-
-App response time
-
-System uptime
-
-User satisfaction ratings
-
-14. Challenges and Limitations
-
-Dependence on Internet Access: The system requires stable connectivity for full functionality.
-
-Manual Data Entry: Without IoT integration, data accuracy depends on user honesty.
-
-Low Technological Literacy: Some community members may find app usage difficult initially.
-
-Funding Constraints: Expansion to rural areas requires additional resources.
-
-15. Future Improvements
-
-IoT Integration: Incorporate sensors to detect leaks and water levels automatically.
-
-Offline Mode: Enable SMS-based reporting for areas with poor internet coverage.
-
-AI Prediction: Use analytics to predict tap failures or water shortages.
-
-Multi-language Support: Include English, French, and local languages.
-
-Government Integration: Share maintenance data with municipal water authorities.
-
-16. Impact on the Community
-
-Bluetap is expected to make a measurable impact on:
-
-Water Resource Efficiency: Reducing waste through early reporting.
-
-Community Empowerment: Giving residents a voice in water management.
-
-Transparency: Eliminating information gaps between citizens and authorities.
-
-Health Outcomes: Minimizing contamination risks by ensuring timely repairs.
-
-Digital Literacy: Introducing communities to digital solutions for local governance.
-
-17. Conclusion
-
-The Bluetap project embodies the fusion of technology and community service. By focusing on real-time communication, collaboration, and transparency, the system directly addresses the persistent challenges surrounding water access and management in Cameroonian communities. Its scalable architecture ensures adaptability for different localities, while its user-centered design promotes inclusivity and ease of use.
-
-Through future integration with IoT and government systems, Bluetap has the potential to evolve into a national digital water management framework, contributing to sustainable development and improved living standards in Cameroon.
+This project is licensed under the MIT License. See the LICENSE file for details.
